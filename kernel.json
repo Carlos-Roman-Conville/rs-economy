@@ -30,5 +30,140 @@
         "economy.price"
       ]
     }
+  ],
+  "ports": [
+    {
+      "mechanism": "economy.trade.trade",
+      "quantity": "settlement.balance_changes",
+      "kind": "quantity",
+      "unit": "money",
+      "direction": "call"
+    },
+    {
+      "mechanism": "economy.trade.trade",
+      "quantity": "settlement.ledger_row",
+      "kind": "record",
+      "unit": null,
+      "direction": "call"
+    },
+    {
+      "mechanism": "economy.trade.shipment",
+      "quantity": "contract.transport_days",
+      "kind": "quantity",
+      "unit": "d",
+      "direction": "in"
+    },
+    {
+      "mechanism": "economy.trade.shipment",
+      "quantity": "settlement.balance_changes",
+      "kind": "quantity",
+      "unit": "money",
+      "direction": "call"
+    },
+    {
+      "mechanism": "economy.trade.shipment",
+      "quantity": "settlement.ledger_row",
+      "kind": "record",
+      "unit": null,
+      "direction": "call"
+    },
+    {
+      "mechanism": "economy.accounting.view",
+      "quantity": "contract.rows",
+      "kind": "record",
+      "unit": null,
+      "direction": "in"
+    },
+    {
+      "mechanism": "economy.labour.wage_quote",
+      "quantity": "contract.posts",
+      "kind": "record",
+      "unit": null,
+      "direction": "in"
+    },
+    {
+      "mechanism": "economy.labour.wage_quote",
+      "quantity": "contract.labour_hours_left",
+      "kind": "quantity",
+      "unit": "person*h",
+      "direction": "in"
+    },
+    {
+      "mechanism": "economy.labour.wage_quote",
+      "quantity": "settlement.post_wage",
+      "kind": "quantity",
+      "unit": "money/d",
+      "direction": "call"
+    },
+    {
+      "mechanism": "economy.consumption.demand",
+      "quantity": "population.cohort_counts",
+      "kind": "quantity",
+      "unit": "person",
+      "direction": "in"
+    },
+    {
+      "mechanism": "economy.material.available",
+      "quantity": "economy.output_units",
+      "kind": "quantity",
+      "unit": "count",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.material.produce",
+      "quantity": "economy.inputs_consumed",
+      "kind": "quantity",
+      "unit": "count",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.material.produce",
+      "quantity": "economy.outputs_and_byproducts_added",
+      "kind": "quantity",
+      "unit": "count",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.material.produce",
+      "quantity": "economy.market_producedtoday",
+      "kind": "quantity",
+      "unit": "count",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.recipe.rates",
+      "quantity": "economy.unitsperfixtureday",
+      "kind": "quantity",
+      "unit": "count/(count*d)",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.recipe.rates",
+      "quantity": "economy.labourhoursperunit",
+      "kind": "quantity",
+      "unit": "person*h/count",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.inventory.holdings",
+      "quantity": "contract.have",
+      "kind": "quantity",
+      "unit": "count",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.inventory.holdings",
+      "quantity": "economy.units_taken",
+      "kind": "quantity",
+      "unit": "count",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.inventory.holdings",
+      "quantity": "economy.stock_changes",
+      "kind": "record",
+      "unit": null,
+      "direction": "out"
+    }
   ]
 }
