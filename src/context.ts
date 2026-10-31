@@ -1,6 +1,7 @@
 // The working context of one reduce call: a deep copy of the state (a throw leaves the caller's state untouched),
 // the config, the providers and the events collected so far. Helpers every command and tick step share.
 
+import { must } from '@rex/kernel'
 import type { EconomyConfig } from './config.ts'
 import type { EconomyEvent } from './events.ts'
 import { mint, type Prefix } from './ids.ts'
@@ -22,31 +23,12 @@ export function newId(ctx: Ctx, prefix: Prefix): string {
   return minted.id
 }
 
-export function must<T>(table: Record<string, T>, id: string, what: string): T {
-  if (!Object.hasOwn(table, id)) throw new Error(`unknown ${what}: ${id}`)
-  return table[id]
-}
+export { must, nonempty, finite, integer } from '@rex/kernel'
 
 export const good = (ctx: Ctx, id: string): Good => must(ctx.state.goods, id, 'good')
 export const recipe = (ctx: Ctx, id: string): Recipe => must(ctx.state.recipes, id, 'recipe')
 export const inventory = (ctx: Ctx, id: string): Inventory => must(ctx.state.inventories, id, 'inventory')
 export const market = (ctx: Ctx, id: string): Market => must(ctx.state.markets, id, 'market')
-
-export function nonempty(value: unknown, what: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} must be a non-empty string`)
-  return value
-}
-
-export function finite(value: unknown, what: string, min = Number.NEGATIVE_INFINITY): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min) throw new Error(`${what} must be a number >= ${min}`)
-  return value
-}
-
-export function integer(value: unknown, what: string, min: number): number {
-  finite(value, what, min)
-  if (!Number.isInteger(value)) throw new Error(`${what} must be an integer`)
-  return value as number
-}
 
 export function stockOf(inv: Inventory, goodId: string): number {
   return inv.stock[goodId] ?? 0

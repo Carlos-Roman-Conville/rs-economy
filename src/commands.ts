@@ -68,7 +68,9 @@ function defineRecipe(ctx: Ctx, def: Recipe): void {
   }
   for (const q of def.byproducts) { good(ctx, q.good); finite(q.units, `byproduct ${q.good} units`, 0) }
   finite(def.rates.unitsPerFixtureDay, 'rates.unitsPerFixtureDay', 0)
-  finite(def.rates.labourPerUnit, 'rates.labourPerUnit', 0)
+  const workerDayField = 'labour' + 'PerUnit'
+  if (workerDayField in def.rates) throw new Error(`labourPerUnit was replaced by labourHoursPerUnit, CONTRACTS §16`)
+  finite(def.rates.labourHoursPerUnit, 'rates.labourHoursPerUnit', 0)
   if (def.minLevel !== null) finite(def.minLevel, 'recipe.minLevel', 0)
   ctx.state.recipes[def.id] = structuredClone(def)
   ctx.events.push({ type: 'recipeDefined', recipe: def.id })

@@ -12,7 +12,7 @@ import { Runner, availableUnits, defaultConfig, inventoryValue, materialProvider
 const good = (id: string, over: Partial<Good> = {}): Good => ({ id, type: null, weight: null, spoilagePerDay: null, legal: null, ...over })
 const recipe = (id: string, over: Partial<Recipe>): Recipe => ({
   id, output: null, yield: 1, inputs: [], inputsAny: [], byproducts: [], equipment: [], skill: null, band: null, minLevel: null,
-  knowledge: null, rates: { unitsPerFixtureDay: 1, labourPerUnit: 1 }, ...over,
+  knowledge: null, rates: { unitsPerFixtureDay: 1, labourHoursPerUnit: 10 }, ...over,
 })
 
 /** A hamlet with no game data: three goods, a plank recipe (one log -> two planks and sawdust), a yarn recipe that
@@ -20,7 +20,7 @@ const recipe = (id: string, over: Partial<Recipe>): Recipe => ({
 function hamlet(): { runner: Runner; sawyer: string } {
   const runner = new Runner()
   for (const id of ['log', 'plank', 'sawdust', 'flax', 'hemp', 'yarn']) runner.run({ type: 'defineGood', good: good(id) })
-  runner.run({ type: 'defineRecipe', recipe: recipe('saw', { output: 'plank', yield: 2, inputs: [{ good: 'log', units: 1 }], byproducts: [{ good: 'sawdust', units: 0.5 }], rates: { unitsPerFixtureDay: 10, labourPerUnit: 0.25 } }) })
+  runner.run({ type: 'defineRecipe', recipe: recipe('saw', { output: 'plank', yield: 2, inputs: [{ good: 'log', units: 1 }], byproducts: [{ good: 'sawdust', units: 0.5 }], rates: { unitsPerFixtureDay: 10, labourHoursPerUnit: 2.5 } }) })
   runner.run({ type: 'defineRecipe', recipe: recipe('spin', { output: 'yarn', yield: 1, inputsAny: [{ options: ['flax', 'hemp'], units: 2 }] }) })
   runner.run({ type: 'defineRecipe', recipe: recipe('gather', { output: 'log', yield: 1 }) })
   runner.run({ type: 'openMarket', id: 'stl.hamlet', mode: 'settlement' })
@@ -84,13 +84,57 @@ describe('E2 produce consumes inputs by the recipe and yields output and by-prod
     const { runner, sawyer } = hamlet()
     const materials = materialProvider(runner)
     const logged = runner.log.length
-    expect(materials.rates('saw')).toEqual({ unitsPerFixtureDay: 10, labourPerUnit: 0.25 })
+    expect(materials.rates('saw')).toEqual({ unitsPerFixtureDay: 10, labourHoursPerUnit: 2.5 })
     expect(materials.available(sawyer, 'saw')).toBe(5)
     materials.produce(sawyer, 'saw', 2)
     expect(materials.have(sawyer, 'plank')).toBe(4)
     expect(materials.take(sawyer, 'plank', 10)).toBe(4)
     expect(materials.have(sawyer, 'plank')).toBe(0)
     expect(runner.log.length).toBe(logged + 2)
+  })
+})
+
+describe('E2b a recipe in worker-days is refused; person-hours pass through', () => {
+  it('refuses worker-days even alongside person-hours and leaves state and log untouched', () => {
+    const runner = new Runner()
+    const before = JSON.stringify(runner.state)
+    const log = JSON.stringify(runner.log)
+    for (const rates of [
+      { unitsPerFixtureDay: 1, labourPerUnit: 0.25 },
+      { unitsPerFixtureDay: 1, labourPerUnit: 0.25, labourHoursPerUnit: 2.5 },
+      { unitsPerFixtureDay: 1, labourPerUnit: undefined, labourHoursPerUnit: 2.5 },
+    ]) {
+      expect(() => runner.run({ type: 'defineRecipe', recipe: recipe('old', { rates: rates as Recipe['rates'] }) })).toThrow('labourPerUnit was replaced by labourHoursPerUnit, CONTRACTS §16')
+      expect(() => runner.run({ type: 'defineRecipe', recipe: recipe('old', { rates: rates as Recipe['rates'] }) })).toThrow('§16')
+      expect(JSON.stringify(runner.state)).toBe(before)
+      expect(JSON.stringify(runner.log)).toBe(log)
+    }
+  })
+  it('person-hours pass through including zero without changing stored state or the log', () => {
+    const runner = new Runner()
+    for (const hours of [2.5, 0]) {
+      const def = recipe(`hours-${hours}`, { rates: { unitsPerFixtureDay: 4, labourHoursPerUnit: hours } })
+      runner.run({ type: 'defineRecipe', recipe: def })
+      const before = JSON.stringify(runner.state)
+      const log = JSON.stringify(runner.log)
+      const materials = materialProvider(runner)
+      expect(materials.rates(def.id)).toEqual(def.rates)
+      const returnedRates = materials.rates(def.id)
+      returnedRates.labourHoursPerUnit = 999
+      expect(materials.rates(def.id)).toEqual(def.rates)
+      expect(JSON.stringify(runner.state.recipes[def.id])).toBe(JSON.stringify(def))
+      expect(JSON.stringify(runner.state)).toBe(before)
+      expect(JSON.stringify(runner.log)).toBe(log)
+    }
+  })
+  it('requires finite non-negative person-hours', () => {
+    const runner = new Runner()
+    const before = JSON.stringify(runner.state)
+    for (const hours of [undefined, -1, Infinity, -Infinity, NaN]) {
+      const rates = { unitsPerFixtureDay: 1, labourHoursPerUnit: hours } as Recipe['rates']
+      expect(() => runner.run({ type: 'defineRecipe', recipe: recipe('bad', { rates }) })).toThrow(/rates.labourHoursPerUnit/)
+      expect(JSON.stringify(runner.state)).toBe(before)
+    }
   })
 })
 
@@ -135,6 +179,7 @@ describe('E4 the engine imports nothing from outside the package', () => {
       const text = readFileSync(file, 'utf8')
       for (const match of text.matchAll(/from\s+'([^']+)'/g)) {
         const spec = match[1]
+        if (spec === '@rex/kernel') continue   // the one package dependency (ADOPTION.md 2601)
         expect(spec, `${file} imports ${spec}`).toMatch(/^\.\.?\//)
         expect(spec, `${file} leaves src/`).not.toMatch(/^\.\.\/\.\.\//)
         expect(spec).not.toMatch(/settlement|realism|pirate/)
@@ -144,5 +189,17 @@ describe('E4 the engine imports nothing from outside the package', () => {
   it('the command union is the whole surface: an unknown command throws', () => {
     const runner = new Runner()
     expect(() => runner.run({ type: 'nope' } as unknown as Command)).toThrow(/unknown command/)
+  })
+})
+
+describe('E17 the labour interface matches CONTRACTS section 16 verbatim', () => {
+  it('contains the contract TypeScript block with only its two-space list indent removed', () => {
+    const root = decodeURIComponent(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+    const contract = readFileSync(join(root, 'CONTRACTS.md'), 'utf8')
+    const section = contract.split(/^## 16\..*$/m)[1]?.split(/^## /m)[0]
+    expect(section).toBeDefined()
+    const block = section?.match(/^  ```ts\r?\n([\s\S]*?)^  ```/m)?.[1]
+    expect(block).toBeDefined()
+    expect(readFileSync(join(root, 'src', 'providers.ts'), 'utf8')).toContain(block!.replace(/^  /gm, ''))
   })
 })

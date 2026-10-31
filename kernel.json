@@ -1,0 +1,34 @@
+{
+  "processes": [
+    {
+      "id": "economy.tick",
+      "mechanisms": [
+        "economy.infra.tick_scheduler",
+        "economy.consumption.demand",
+        "economy.market.observed_production",
+        "economy.production.abstract_market",
+        "economy.shortage.event",
+        "economy.spoilage"
+      ],
+      "period": 86400000,
+      "phase": "day.economy",
+      "writes": [
+        "economy.ticktrace",
+        "economy.consumed_events",
+        "economy.consumedlast",
+        "economy.stock_taken",
+        "economy.unmetlast",
+        "economy.producedlast",
+        "economy.producedtoday",
+        "economy.stock_added",
+        "economy.shortage_fraction",
+        "economy.spoiled_event",
+        "economy.stock_lost"
+      ],
+      "reads": [
+        "economy.market_state",
+        "economy.price"
+      ]
+    }
+  ]
+}

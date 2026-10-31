@@ -10,8 +10,10 @@ not a game rule.
 |---|---|---|
 | E1 | stock never goes negative | a move, removal or production beyond stock throws and the state is byte-identical to before; `take` returns at most the stock; no inventory holds a zero or negative entry |
 | E2 | produce consumes inputs by the recipe's quantities and yields output and by-products | one log makes two planks and half a unit of sawdust; the market's `producedToday` rises by the output and rolls to `producedLast` at tick; an `inputsAny` group pools its options and draws the first available first (proposed); a recipe with no inputs is unlimited by materials; `units` must be an integer >= 1; the `MaterialProvider` over a `Runner` has Settlement's shape plus `rates` and logs every call |
+| E2b | a recipe in worker-days is refused; person-hours pass through | worker-day fields are refused even alongside person-hours; finite non-negative person-hours are required; zero passes through; stored recipes, state and log remain byte-identical after provider reads |
 | E3 | replay gives the same state | a day of commands replayed from the log is JSON-identical, ids included; prices and shortage read from the five numbers and read `null` where the host set nothing (never a default); `priceRule: base` returns the base price, a configured curve scales it |
 | E4 | no import from outside the package | every import in `src/` is relative and stays inside `src/`; no spec names settlement, realism or pirate; an unknown command throws |
+| E17 | one labour interface (CONTRACTS section 16) | `src/providers.ts` contains the section 16 TypeScript block verbatim after removing its two-space list indent |
 
 ## Package tests (`test/markets.test.ts`), steps 3–4
 
@@ -35,7 +37,7 @@ not a game rule.
 
 | Id | Rule under test | Must hold |
 |---|---|---|
-| E12 | the wage quote rises when posts outnumber workers | the default rule (`posted-median`) quotes the role's posted median with no pressure (the open state) and nothing for a role with no posts; under the `ratio` rule the quote rises with more posts than workers, falls with more workers, stays within its floor and ceiling, and falls back to the median when the host's supply is unknown |
+| E12 | the wage quote rises when demand hours exceed supply hours | the default rule (`posted-median`) quotes the role's posted median with no pressure (the open state) and nothing for a role with no posts; under the `ratio` rule the quote rises with more demand hours than supply hours, falls with more supply hours, stays within its floor and ceiling; posts demand 10 hours each and former worker counts supply 10 hours each, preserving the quote values |
 | E14 | the three-port sim is deterministic | thirty days run twice give the same state, log and printed table; every price finite, no negative stock; the companies' purses and the ports' takings sum to what the companies started with; at least one shipment and one sale happened |
 
 ## Integration (`Games/RPG's/pirate-ship/web/src/economy/economy.test.ts`, steps 9–10; pirate commit 962702a)
@@ -43,6 +45,21 @@ not a game rule.
 | Id | Rule under test | Must hold |
 |---|---|---|
 | I1 | the port's butcher produces into an economy inventory through the material provider | one settlement day: Settlement's Q (four units of meat from one butcher, no labour left for the fish line) is the stock move the economy records, with by-products; every provider call Settlement made is a logged economy command and the day replays; the reader sees the settlement's businesses, posts, production for that day only, and fixtures; the price provider answers for goods and refuses property (open); the ledger provider is Settlement's ledger |
+| I1b | a project draws from its own inventory (CONTRACTS §15, DUP-44) | materials leave the economy inventory behind the project's `inventory` ref, the project's wage is one ledger row from its `account`, and the account is never resolved as an inventory |
+| I1c | the material queries are pure (CONTRACTS §17) | `available` and `have` on an unseen inventory ref change no state and log nothing; `take` still opens the inventory |
+| I4a | the default wage rule issues no `setWage` (CONTRACTS §16, group 11) | thirty days under `posted-median`: no `setWage` in Settlement's log, the golden untouched |
+| I4b | under a pressure rule a wage moves only through `setWage` | every change of a post's wage is preceded by a `setWage` for it, and each day's wage rows equal `Post.wage` |
 | I2 | thirty autonomous days of the port with both engines | every day: the two days aligned, no negative stock, Settlement's total money unchanged, every price finite, the economy's observed production equals Settlement's Q per line; inputs run out part way and the shop goes back to staffed; cattle is conserved into meat sold, eaten or on the shelf; the shop's balance equals the accounting view's profit; the economy's whole run replays byte for byte |
 
-Planned: I3 consumption from a realism population provider (step 11, waits on the body-and-world keeper).
+Settlement's I3 (assigned hours never exceed supplied hours, `web/src/settlement/labour.test.ts`) covers group 10's
+acceptance. Planned: consumption from a realism population provider (PLAN step 11).
+
+## Conservation and stability (`test/validation.test.ts`)
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| V1 | goods ledger | replay 365 days of three-ports: for every good after every command, start + host additions + production = held + transit + consumed + spoiled to relative 1e-9; moves and trades net to zero; shipping and arrival are counted only from stock-change reasons against transit changes, with transit spoilage excluded from transfers; supplemental recipe fixture covers inputs, alternatives and by-products |
+| V2 | money conservation | after every command over the same 365-day scenario, all ledger balances sum to the sum of starting balances set by replay funding to relative 1e-9 |
+| V3 | price bounds | every PriceRule at shortages 0, 0.25, 0.5, 0.75 and 1 gives finite queried and tick-written prices within its own bounds times base; base rule equals base exactly |
+| V5 | King-Davenant table | independently transcribed ECON-DAV rows and zero reproduced to 1e-12; linear interpolation and base scaling; non-decreasing on a 0.01 grid over [0, 1], capped from 0.5; cap 5 and NaN refused at Runner construction and by direct price queries, before the first tick or state changes; cap 5.5 accepted; direct assertPriceRule checks refuse cap 5 and NaN and accept 5.5; default remains base |
+| V4 | supply shock stability | for every PriceRule kind, halve north's grain production on zero-based days [60, 90), then restore it; over 365 days every daily price stays finite and within rule bounds, every balance stays finite and total money equals the sum of starting balances set by replay funding to relative 1e-9 |

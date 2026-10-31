@@ -1,6 +1,6 @@
 // Pure reads over state. Prices follow config.priceRule (CONTRACTS.md §7: a config key until Rex chooses).
 
-import type { EconomyConfig } from './config.ts'
+import { assertPriceRule, type EconomyConfig } from './config.ts'
 import type { LedgerProvider } from './providers.ts'
 import type { EconomyState } from './state.ts'
 
@@ -28,11 +28,19 @@ export function shortage(state: EconomyState, market: string, good: string): num
 /** The price of a good in a market by the configured rule, computed now; null when the host has set no base price (open).
  *  The tick writes the same number to `MarketGood.price` once a day (step `prices`). */
 export function price(state: EconomyState, config: EconomyConfig, market: string, good: string): number | null {
+  const rule = config.priceRule
+  assertPriceRule(rule)
   const entry = state.markets[market]?.goods[good]
   if (!entry || entry.basePrice === null) return null
-  const rule = config.priceRule
   if (rule.kind === 'base') return entry.basePrice
   const s = shortage(state, market, good) ?? 0
+  if (rule.kind === 'king-davenant-table') {
+    if (s >= 0.5) return entry.basePrice * rule.cap
+    const multiples = [1, 1.3, 1.8, 2.6, 3.8, 5.5]
+    const interval = Math.floor(s * 10)
+    const fraction = s * 10 - interval
+    return entry.basePrice * (multiples[interval] + (multiples[interval + 1] - multiples[interval]) * fraction)
+  }
   return entry.basePrice * (rule.low + (rule.high - rule.low) * s)
 }
 

@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit",
     "ports": "node --experimental-strip-types examples/three-ports.ts"
   },
+  "dependencies": {
+    "@rex/kernel": "file:../kernel"
+  },
   "devDependencies": {
     "typescript": "~6.0.2",
     "vitest": "^5.0.5"

@@ -25,10 +25,21 @@ export interface PopulationProvider {
   headcount(market: string, day: number): number
 }
 
-/** Workers the host's pools could supply for a role in a market today (§5): the population model's number, never
- *  this engine's. `null` when the host does not know. */
-export interface LabourSupplyProvider {
-  supply(market: string, role: string, day: number): number | null
+export interface LabourRow { category: string; persons: number; personHours: number }
+
+export interface LabourSupply {
+  /** The population's supply today by category (adult men, adult women, elders, children: Reality's
+   *  categories); persons = cohort × health × (1 − sick share), health applied once; personHours = persons ×
+   *  the host's hours per day (one number, Settlement's `hoursPerDay`, SET-12). */
+  supply(day: number): LabourRow[]
+  /** False while a person is aboard, dead or away: the host knows, the engines do not. */
+  available(person: string, day: number): boolean
+  /** Person-hours a person or a pool offers for a role today. */
+  hours(source: string, role: string, day: number): number
+  /** Person-hours a pool grants a post today: at most `wantedHours` and at most what it has not granted yet. */
+  draw(pool: string, role: string, requires: unknown, wantedHours: number, day: number): number
+  /** 0..n output factor of a holder in a role; the host maps skill bands to it. */
+  productivity(holder: string, role: string): number
 }
 
 export interface TransportProvider {
@@ -39,7 +50,7 @@ export interface TransportProvider {
 export interface Providers {
   ledger: LedgerProvider
   population: PopulationProvider
-  labour: LabourSupplyProvider
+  labour: LabourSupply
   transport: TransportProvider
 }
 
@@ -68,10 +79,24 @@ export class StubPopulation implements PopulationProvider {
   headcount(market: string): number { return this.counts[market] ?? 0 }
 }
 
-export class StubLabourSupply implements LabourSupplyProvider {
-  table: Record<string, number> = {}        // key `${market}:${role}`
-  set(market: string, role: string, workers: number): void { this.table[`${market}:${role}`] = workers }
-  supply(market: string, role: string): number | null { return this.table[`${market}:${role}`] ?? null }
+export class StubLabourSupply implements LabourSupply {
+  rows: Record<number, LabourRow[]> = {}
+  table: Record<string, number> = {}        // key `${source}:${role}`, person-hours
+  away = new Set<string>()
+  factors: Record<string, number> = {}      // key `${holder}:${role}`
+  private grants = new Map<string, number>()
+  set(source: string, role: string, hours: number): void { this.table[`${source}:${role}`] = hours }
+  supply(day: number): LabourRow[] { return this.rows[day] ?? [] }
+  available(person: string, _day: number): boolean { return !this.away.has(person) }
+  hours(source: string, role: string, _day: number): number { return this.table[`${source}:${role}`] ?? 0 }
+  draw(pool: string, role: string, _requires: unknown, wantedHours: number, day: number): number {
+    const key = JSON.stringify([pool, role, day])
+    const granted = this.grants.get(key) ?? 0
+    const hours = Math.max(0, Math.min(wantedHours, this.hours(pool, role, day) - granted))
+    this.grants.set(key, granted + hours)
+    return hours
+  }
+  productivity(holder: string, role: string): number { return this.factors[`${holder}:${role}`] ?? 1 }
 }
 
 export class StubTransport implements TransportProvider {

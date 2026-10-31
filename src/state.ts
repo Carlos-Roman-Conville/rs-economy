@@ -17,7 +17,7 @@ export interface AnyOf { options: string[]; units: number }
 
 export interface Rates {
   unitsPerFixtureDay: number   // output units one fixture of each needed kind allows per day
-  labourPerUnit: number        // worker-days per output unit; 0 = the line needs no labour
+  labourHoursPerUnit: number   // person-hours per output unit; 0 = the line needs no labour
 }
 
 export interface Recipe {

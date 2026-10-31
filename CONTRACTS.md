@@ -212,6 +212,7 @@ assignment; every rule Rex has not decided is a config key or an open item in th
 4. Is named characters' spending simulated, or only pools' (§5)?
 5. The price formula and its constants (§7): a config key until then.
 6. Wage levels per trade (Settlement Q10) and whether a market wage quote may move them.
+8. (settlement, added 2026-10-30, s16 wages) May a payer go into debt, or does an unpaid wage stall the post?
 7. (settlement, added) Does an idle fixture count for "the settlement has it" (Settlement Q9; the reader's
    `hasFixture` default is yes)?
 
@@ -248,6 +249,84 @@ marked lines above, and they are these:
 Nothing in Settlement changes until the economy keeper confirms; then the §13 commit follows, this file is marked
 agreed with the date, and the identical text is held in both repos.
 
+## 15. Project inventories (DUP-44; proposed by the economy keeper, agreed by the settlement keeper, 2026-10-30)
+
+`Project.account` was used both as the money holder and as the inventory ref in Settlement's project step
+(`Toolchain/GRAPH.md` DUP-44). Agreed:
+
+- `Project` gains `inventory: string`, an opaque inventory ref like `Business.inventory`.
+- The project step draws materials through `have` / `take` on `inventory`, and pays wages from `account` exactly
+  as before.
+- `startProject` takes `inventory` optionally, defaulting to `account`, so existing logs and the hamlet replay are
+  unchanged.
+- The pirate adapter resolves it through the economy adapter's aliases as it does business refs.
+- This supersedes the §2 note that a project's materials are drawn from `Project.account`.
+
+Timing: before the kernel adoption, so the kernel's byte-identity baseline is taken after the fix. Settlement's
+test: U16 (materials from `project.inventory`, wages from `project.account`, the default for old callers).
+
+## 16. Labour (DUP-26, DUP-28, DUP-29; Rex approved the owners 2026-10-30; AGREED 2026-10-30: the economy keeper's P1.md rev 2 text with the settlement keeper's amendments A and B)
+
+- **One unit, person-hours.** A recipe's labour requirement is `rates.labourHoursPerUnit` (person-hours per output
+  unit), replacing `labourPerUnit` (worker-days). Settlement's labour cap per line is the filled posts'
+  `hours × productivity`, shared as `config.labourSharing` says, over `labourHoursPerUnit`. Data converts once at
+  `labourHoursPerUnit = labourPerUnit × 10` (Settlement's `hoursPerDay` today), so results do not move.
+  `hoursPerDay` stays Settlement's config for projects' worker-days (SET-12: 10 today, 11 in Voth; Rex's). (settlement: amended: projects move to person-hours too, `Project.labourHours` = `labourDays` x 10 once, and a project's per-day wage pays `wage x hours / hoursPerDay`, so results do not move; `hoursPerDay` is then the one number where days and hours meet, which the host also passes to the population's `personHours`.)
+- **One interface, `LabourSupply`**, declared with this exact text in both engines' `providers.ts`, implemented by
+  the population model (Reality in the interim, Society later) or the host, stubbed in each engine's tests:
+
+  ```ts
+  export interface LabourRow { category: string; persons: number; personHours: number }
+
+  export interface LabourSupply {
+    /** The population's supply today by category (adult men, adult women, elders, children: Reality's
+     *  categories); persons = cohort × health × (1 − sick share), health applied once; personHours = persons ×
+     *  the host's hours per day (one number, Settlement's `hoursPerDay`, SET-12). */
+    supply(day: number): LabourRow[]
+    /** False while a person is aboard, dead or away: the host knows, the engines do not. */
+    available(person: string, day: number): boolean
+    /** Person-hours a person or a pool offers for a role today. */
+    hours(source: string, role: string, day: number): number
+    /** Person-hours a pool grants a post today: at most `wantedHours` and at most what it has not granted yet. */
+    draw(pool: string, role: string, requires: unknown, wantedHours: number, day: number): number
+    /** 0..n output factor of a holder in a role; the host maps skill bands to it. */
+    productivity(holder: string, role: string): number
+  }
+  ```
+
+  It replaces Settlement's `LabourProvider` and Economy's `LabourSupplyProvider`. One type, one implementation per
+  host, composed: the population model (Reality in the interim) answers `supply`, and `hours` and `draw` for
+  pools (a pool id names its categories, host data); the host answers `available` and `productivity` for named
+  persons. A pool's `hours` is the sum of its categories' `personHours`.
+- **Assignment never exceeds supply.** Settlement assigns: on any day the hours it fills from a source never exceed
+  `hours(source, role, day)` (a person) or the pool's grants (a pool).
+- **Sharing across lines** is `config.labourSharing`: `'in-order'` (today's rule, the default) until Rex answers
+  Q15; any other value throws "open for Rex (Q15)".
+- **Wages.** Economy's `wageQuote(market, role, day)` sets the level by `config.wageRule` (default `posted-median`);
+  the host applies a quote to a post only through Settlement's `setWage`, before Settlement's tick; Settlement's
+  `pay` executes it. Whether a quote may move a wage at all, and the levels, are Rex's (Q10, §12.6). Whether a
+  payer may go into debt is recorded for Rex, not decided.
+- **Inventories (DUP-44, follow-up to §15).** Settlement's loader takes an optional `inventoryOf(place, biz)` so the
+  host mints each business's inventory in the economy at replay time; the economy adapter's alias table then retires.
+  (settlement: amended: Settlement adds the command `{ type: 'setInventory', biz, inventory }` that rebinds a
+  business's inventory ref; the loader issues it right after `openBusiness`, so the business id exists when the
+  hook mints its inventory.)
+
+## 17. Provider queries are pure (proposed by the settlement keeper, agreed by the economy keeper, 2026-10-30)
+
+Production calls `materials.rates` and `materials.available` twice per line per tick (the Q20 prepass, then the
+production pass), as well as the host's `labour.productivity` and `utilities.capacity`. Each query must be pure: no
+state change, and the same answer for the same arguments within a tick. This supersedes §4a's 'read once per line per
+tick' note on `rates`. `produce` and `take` are not queries and are called at most once per line.
+
+## 18. What `hours` returns, and named holders in a wage quote (proposed by the economy keeper, agreed by the settlement keeper, 2026-10-30)
+
+`LabourSupply.hours(source, role, day)` returns what the source has left after that day's grants, not its capacity
+(persons × hours per day); a client that wants capacity reads it before the day's grants. In a wage quote, a named
+holder offers the hours of the posts they hold, capped at those posts' hours, because a named person's supply is
+otherwise unbounded and the quote would not be finite. A quote that is null or not finite is skipped and no
+`setWage` is issued for it.
+
 ## Log
 
 | Date | What |
@@ -255,3 +334,7 @@ agreed with the date, and the identical text is held in both repos.
 | 2026-10-30 | Proposal written and sent to the settlement keeper (economy keeper) |
 | 2026-10-30 | Counter-proposal with inline amendments and §14 returned to the economy keeper (settlement keeper) |
 | 2026-10-30 | All nine amendments confirmed by the economy keeper; §13 a, b, c, e landed in Settlement with U13, U14; agreed |
+| 2026-10-30 | §15 (DUP-44, `Project.inventory`) proposed by the economy keeper, agreed and landed in Settlement with U16 |
+| 2026-10-30 | §16 AGREED: the economy keeper's P1.md rev 2 text (Reality's supply rows) with the settlement keeper's amendments A (projects in person-hours) and B (`setInventory`); the settlement draft (3cd7bd8) and its interim agreed form (828091f) are withdrawn. From here, a change to §16 is a new section agreed by both keepers, never a swap of drafts |
+| 2026-10-30 | §17 (provider queries are pure) proposed by the settlement keeper after its Q20 prepass, agreed by the economy keeper; the economy adapter's `available` and `have` no longer mint an inventory for an unseen ref (pirate 6383414) |
+| 2026-10-30 | §18 (what `hours` returns; named holders in a wage quote) proposed by the economy keeper after reverting its lane's in-place edit of §16 (economy 4fb822a, d3ad33d), agreed by the settlement keeper: Settlement's `StubLabourSupply.hours` returns what is left after the day's grants and staffing caps a named holder at the post's hours |

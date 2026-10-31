@@ -16,6 +16,8 @@ either side implements production or labour. `CONTRACTS.md` is the agreed text.
 1. `../ENGINES.md`: owners, boundaries, the contracts to agree.
 2. [CONTRACTS.md](CONTRACTS.md): who owns which record, what each side promises, the interfaces.
 3. [PLAN.md](PLAN.md): the steps from contract to the thirty-day settlement benchmark, each with its tests.
+4. [VALIDATION.md](VALIDATION.md): implemented / integrated / validated per mechanism, conservation and stability,
+   findings, the validation units (PLATFORM.md §11a).
 
 ## Run
 

@@ -28,15 +28,17 @@ Barbados 3d a lb against 12d in London (L). Those gaps mix freight, duty and pro
 curve rather than fit it.
 
 **Proposed rule (estimate).** Price = base × f(shortage), where shortage = 1 − stock / targetReserve (0 when the
-reserve is met, 1 when empty; the engine's existing reading). Fit f to the King–Davenant rows by treating the
-harvest deficit as the shortage: f(0) = 1, f(0.1) = 1.3, f(0.2) = 1.8, f(0.3) = 2.6, f(0.4) = 3.8, f(0.5) = 5.5.
-Jevons' fit (ECON-DAV) is p = 0.824 / (x − 0.12)² with x the supply ratio; in shortage terms, with s = 1 − x,
-f(s) = 0.824 / (0.88 − s)². It reproduces the table to within a tenth up to s = 0.5 and rises steeply beyond,
-which is the famine end the table never reached. A surplus (stock above reserve) has no period table; the
+reserve is met, 1 when empty; the engine's existing reading). Treat the harvest deficit as the shortage: f(0) = 1,
+f(0.1) = 1.3, f(0.2) = 1.8, f(0.3) = 2.6, f(0.4) = 3.8, f(0.5) = 5.5, and **interpolate the table linearly
+between rows** (exact at every row, monotone, no fitted constant). Corrected 2026-10-30 (VALIDATION.md V-F1): this
+section first proposed Jevons' fit, f(s) = 0.824 / (0.88 − s)², but checked against the table it misses by up to
+6.4% (+6.4% at 0, +4.2% at 0.1, −1.0% at 0.2, −5.8% at 0.3, −5.9% at 0.4, +3.8% at 0.5), gives f(0) = 1.064 so a
+market at its reserve would price above base, and has a pole at s = 0.88. Beyond the table's last row the price is
+held at 5.5 × base (an extrapolation, estimate): the table never reached famine. A surplus (stock above reserve) has no period table; the
 illustrative linear curve of ALIGNMENT §10 puts the floor at 0.7 × base, and the Barbados/London sugar gap says a
 glutted producer market sits at a quarter of the consumer price, so a floor between 0.5 and 0.7 is an estimate
-with that range. **Default proposed:** `priceRule: { kind: 'king-davenant', floor: 0.7, cap: 5.5 }` (floor and cap
-estimates; the curve researched). The engine keeps `base` until Rex approves; the new kind is one function in
+with that range. **Default proposed:** `priceRule: { kind: 'king-davenant-table', cap: 5.5 }` (the curve researched as the
+table itself; the cap an estimate). The engine keeps `base` until Rex approves; the new kind is one function in
 `queries.ts` when he does.
 
 ## 2. econ 6: wage levels per trade (researched + estimate)

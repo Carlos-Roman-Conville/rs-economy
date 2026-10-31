@@ -14,7 +14,12 @@ export interface DayRow { day: number; cells: Record<string, { price: number | n
 
 export interface SimResult { rows: DayRow[]; state: unknown; balances: Record<string, number>; log: unknown[]; companies: string[] }
 
-export function simulate(days = 30, config: EconomyConfig = { ...defaultConfig(), priceRule: { kind: 'shortage-linear', low: 0.7, high: 3 } }): SimResult {
+export interface SimOptions {
+  /** Zero-based days, fromDay inclusive and toDay exclusive. */
+  shock?: { port: string; good: string; fromDay: number; toDay: number; factor: number }
+}
+
+export function simulate(days = 30, config: EconomyConfig = { ...defaultConfig(), priceRule: { kind: 'shortage-linear', low: 0.7, high: 3 } }, options: SimOptions = {}): SimResult {
   const providers = stubProviders()
   providers.transport.set('port.north', 'port.east', 2)
   providers.transport.set('port.east', 'port.south', 3)
@@ -53,8 +58,18 @@ export function simulate(days = 30, config: EconomyConfig = { ...defaultConfig()
   }
 
   const rows: DayRow[] = []
+  const shock = options.shock
+  if (shock && (!numbers[shock.port]?.[shock.good] || !Number.isInteger(shock.fromDay) || !Number.isInteger(shock.toDay)
+    || shock.fromDay < 0 || shock.toDay <= shock.fromDay || !Number.isFinite(shock.factor) || shock.factor < 0)) {
+    throw new Error('shock needs a known port/good, 0 <= fromDay < toDay (integer days), and a finite non-negative factor')
+  }
   for (let day = 0; day < days; day++) {
     providers.ledger.day = day
+    if (shock && (day === shock.fromDay || day === shock.toDay)) {
+      const production = numbers[shock.port][shock.good].production
+      runner.run({ type: 'setMarketGood', market: shock.port, good: shock.good,
+        productionPerDay: production * (day === shock.fromDay ? shock.factor : 1) })
+    }
     // Policy (example only): for each company and good, find the port with the most surplus over reserve and the
     // port with the worst shortage; if the shortage port pays more, buy one lot at the surplus port and ship it.
     for (const c of companies) {
