@@ -15,6 +15,7 @@ export interface Ctx {
   events: EconomyEvent[]
   minted: string | null       // the id a command minted, for the host
   taken: number | null        // what `take` took
+  takenKg?: number            // kilograms `takeMass` took; absent for other commands
 }
 
 export function newId(ctx: Ctx, prefix: Prefix): string {

@@ -1,8 +1,20 @@
 // Pure reads over state. Prices follow config.priceRule (CONTRACTS.md §7: a config key until Rex chooses).
 
 import { assertPriceRule, type EconomyConfig } from './config.ts'
+import { must } from './context.ts'
 import type { LedgerProvider } from './providers.ts'
 import type { EconomyState } from './state.ts'
+
+/** Kilograms represented by units of a good; null when its mass is unknown. */
+export function massOf(state: EconomyState, good: string, units: number): number | null {
+  const { weight } = must(state.goods, good, 'good')
+  return weight === null ? null : units * weight
+}
+
+/** The host's mapping to a Life nutrition food id, if any. */
+export function foodOf(state: EconomyState, good: string): string | null {
+  return must(state.goods, good, 'good').food ?? null
+}
 
 export function stock(state: EconomyState, inventory: string, good: string): number {
   const inv = state.inventories[inventory]

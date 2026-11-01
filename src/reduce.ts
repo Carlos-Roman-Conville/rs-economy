@@ -9,12 +9,14 @@ import type { EconomyEvent } from './events.ts'
 import { stubProviders, type Providers } from './providers.ts'
 import { initialState, type EconomyState } from './state.ts'
 
-export interface ReduceResult { state: EconomyState; events: EconomyEvent[]; minted: string | null; taken: number | null }
+export interface ReduceResult { state: EconomyState; events: EconomyEvent[]; minted: string | null; taken: number | null; takenKg?: number }
 
 export function reduce(state: EconomyState, command: Command, config: EconomyConfig = defaultConfig(), providers: Providers = stubProviders()): ReduceResult {
   const ctx: Ctx = { state: structuredClone(state), config, providers, events: [], minted: null, taken: null }
   apply(ctx, command)
-  return { state: ctx.state, events: ctx.events, minted: ctx.minted, taken: ctx.taken }
+  const result: ReduceResult = { state: ctx.state, events: ctx.events, minted: ctx.minted, taken: ctx.taken }
+  if (command.type === 'takeMass') result.takenKg = ctx.takenKg
+  return result
 }
 
 export class Runner extends KernelRunner<EconomyState, Command, ReduceResult, EconomyEvent> {

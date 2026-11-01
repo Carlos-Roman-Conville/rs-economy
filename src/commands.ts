@@ -7,7 +7,12 @@ import { price as priceOf } from './queries.ts'
 import type { Good, MarketMode, Recipe } from './state.ts'
 import { tick } from './tick/index.ts'
 
+export type TakeMass = { type: 'takeMass'; inventory: string; good: string; kg: number }
+export type AddMass = { type: 'addMass'; inventory: string; good: string; kg: number }
+
 export type Command =
+  | TakeMass
+  | AddMass
   | { type: 'defineGood'; good: Good }
   | { type: 'defineRecipe'; recipe: Recipe }
   | { type: 'openInventory'; holder: string; market: string }
@@ -36,6 +41,8 @@ export function apply(ctx: Ctx, command: Command): void {
     case 'moveStock': return moveStock(ctx, command.from, command.to, command.good, command.units)
     case 'produce': return produce(ctx, command.inventory, command.recipe, command.units)
     case 'take': return take(ctx, command.inventory, command.good, command.units)
+    case 'takeMass': return transferMass(ctx, command)
+    case 'addMass': return transferMass(ctx, command)
     case 'openOrganisation': return openOrganisation(ctx, command.name, command.kind ?? null)
     case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price)
     case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price)
@@ -49,6 +56,7 @@ function defineGood(ctx: Ctx, def: Good): void {
   nonempty(def.id, 'good.id')
   if (Object.hasOwn(ctx.state.goods, def.id)) throw new Error(`good already defined: ${def.id}`)
   if (def.weight !== null) finite(def.weight, 'good.weight', 0)
+  if ('food' in def && def.food !== null) nonempty(def.food, 'good.food')
   if (def.spoilagePerDay !== null) { finite(def.spoilagePerDay, 'good.spoilagePerDay', 0); if (def.spoilagePerDay > 1) throw new Error('good.spoilagePerDay must be <= 1') }
   ctx.state.goods[def.id] = { ...def }
   ctx.events.push({ type: 'goodDefined', good: def.id })
@@ -158,6 +166,25 @@ function take(ctx: Ctx, invId: string, goodId: string, units: number): void {
   const taken = Math.min(units, stockOf(inv, goodId))
   if (taken > 0) adjust(ctx, inv, goodId, -taken, 'take')
   ctx.taken = taken
+}
+
+function transferMass(ctx: Ctx, command: TakeMass | AddMass): void {
+  const inv = inventory(ctx, command.inventory)
+  const { weight } = good(ctx, command.good)
+  finite(command.kg, 'kg', 0)
+  if (weight === null || weight === 0) throw new Error('mass transfer requires a known positive good.weight')
+  if (command.type === 'takeMass') {
+    const held = stockOf(inv, command.good)
+    const takenKg = Math.min(command.kg, held * weight)
+    // Use the exact held units when emptying stock to avoid division roundoff.
+    const units = takenKg === held * weight ? held : takenKg / weight
+    if (units > 0) adjust(ctx, inv, command.good, -units, 'takeMass')
+    ctx.takenKg = takenKg
+  } else {
+    const units = command.kg / weight
+    finite(units, 'mass transfer units', 0)
+    adjust(ctx, inv, command.good, units, 'addMass')
+  }
 }
 
 function openOrganisation(ctx: Ctx, name: string, kind: string | null): void {

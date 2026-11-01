@@ -15,6 +15,22 @@ not a game rule.
 | E4 | no import from outside the package | every import in `src/` is relative and stays inside `src/`; no spec names settlement, realism or pirate; an unknown command throws |
 | E17 | one labour interface (CONTRACTS section 16) | `src/providers.ts` contains the section 16 TypeScript block verbatim after removing its two-space list indent |
 
+## M — goods mass (CHAINS CG-19)
+
+`test/mass.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| M1 | takeMass conserves kilograms at the source | 3 kg removes six 0.5 kg units; source mass falls by exactly the reported 3 kg; taken stays null; market unchanged |
+| M2 | takeMass is capped by stock | excess demand removes all stock and reports its mass; empty stock returns zero, never negative |
+| M3 | mass round trip | adding 2 kg adds four units; taking 2 kg restores stock within 1e-12; market unchanged; other results omit takenKg |
+| M4 | positive known weight required | null and zero weights refuse both commands with state and log untouched; massOf returns null or zero respectively |
+| M5 | finite non-negative kilograms | negative, NaN and infinite kg refuse both commands with state and log untouched |
+| M6 | optional Life food mapping | foodOf returns the mapped id or null; an absent food field leaves serialization unchanged |
+| M7 | deterministic mass replay | a log containing both commands replays to byte-identical state |
+| M8 | known inventory and good required | either unknown reference refuses both commands with state and log untouched |
+| M9 | food mapping validation | a present food must be a non-empty string or null; invalid values leave state and log untouched |
+
 ## Package tests (`test/markets.test.ts`), steps 3–4
 
 | Id | Rule under test | Must hold |

@@ -6,7 +6,8 @@ import type { Counters } from './ids.ts'
 export interface Good {
   id: string
   type: string | null          // base / specialty / cultural / money ... (open, Rex: GOODS.md Open 1-8); null = open
-  weight: number | null        // per unit, host's unit; null = open
+  weight: number | null        // kilograms per unit of the good; null = unknown
+  food?: string | null         // Life nutrition food id; null/absent = not food or not mapped
   spoilagePerDay: number | null // fraction of stock lost per day; null = none known (step 3 reads it)
   legal: unknown               // host data; never interpreted here
 }
