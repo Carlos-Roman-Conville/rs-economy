@@ -2,7 +2,7 @@
 
 import type { MoneyLeg, GoodsLeg } from './providers.ts'
 
-export type Refused = { type: 'refused'; command: 'buy' | 'sell' | 'takeMass' | 'exchange'; reason: 'price-above-limit' | 'price-below-limit' | 'no-price' | 'beyond-stock' | 'no-stock'; price: number | null; limit?: number; units?: number; available?: number; cause?: string }
+export type Refused = { type: 'refused'; command: 'buy' | 'sell' | 'takeMass' | 'exchange'; reason: 'price-above-limit' | 'price-below-limit' | 'no-price' | 'beyond-stock' | 'no-stock' | 'not-accepted'; currency?: string; market?: string; refusedBy?: string; price: number | null; limit?: number; units?: number; available?: number; cause?: string }
 
 export type ActionOutcome = { type: 'shared.action.outcome'; cause: string; status: 'completed' | 'failed'; stimuli: Record<string, string | number | null>[]; payload: EconomyEvent }
 
@@ -23,8 +23,8 @@ export type EconomyEvent = { cause?: string } & (
   | { type: 'shortage'; market: string; good: string; stock: number; targetReserve: number; shortage: number }
   | { type: 'priceSet'; market: string; good: string; price: number; was: number | null }
   | { type: 'organisationOpened'; organisation: string; name: string }
-  | { type: 'sold'; inventory: string; market: string; good: string; units: number; price: number; amount: number; txn: string }
-  | { type: 'bought'; inventory: string; market: string; good: string; units: number; price: number; amount: number; txn: string }
+  | { type: 'sold'; inventory: string; market: string; good: string; units: number; price: number; amount: number; txn: string; currency?: string }
+  | { type: 'bought'; inventory: string; market: string; good: string; units: number; price: number; amount: number; txn: string; currency?: string }
   | { type: 'shipped'; shipment: string; from: string; to: string; good: string; units: number; arrives: number; freightTxn: string | null }
   | { type: 'arrived'; shipment: string; to: string; good: string; units: number }
   | { type: 'dayEnded'; day: number }

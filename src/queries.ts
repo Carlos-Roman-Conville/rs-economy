@@ -39,31 +39,33 @@ export function shortage(state: EconomyState, market: string, good: string): num
 
 /** The price of a good in a market by the configured rule, computed now; null when the host has set no base price (open).
  *  The tick writes the same number to `MarketGood.price` once a day (step `prices`). */
-export function price(state: EconomyState, config: EconomyConfig, market: string, good: string): number | null {
+export function price(state: EconomyState, config: EconomyConfig, market: string, good: string, currency = 'money'): number | null {
   const rule = config.priceRule
   assertPriceRule(rule)
   const entry = state.markets[market]?.goods[good]
-  if (!entry || entry.basePrice === null) return null
-  if (rule.kind === 'base') return entry.basePrice
+  const base = currency === 'money' ? entry?.basePrice
+    : entry?.basePrices && Object.hasOwn(entry.basePrices, currency) ? entry.basePrices[currency] : null
+  if (base == null) return null
+  if (rule.kind === 'base') return base
   const s = shortage(state, market, good) ?? 0
   if (rule.kind === 'king-davenant-table') {
-    if (s >= 0.5) return entry.basePrice * rule.cap
+    if (s >= 0.5) return base * rule.cap
     const multiples = [1, 1.3, 1.8, 2.6, 3.8, 5.5]
     const interval = Math.floor(s * 10)
     const fraction = s * 10 - interval
-    return entry.basePrice * (multiples[interval] + (multiples[interval + 1] - multiples[interval]) * fraction)
+    return base * (multiples[interval] + (multiples[interval + 1] - multiples[interval]) * fraction)
   }
-  return entry.basePrice * (rule.low + (rule.high - rule.low) * s)
+  return base * (rule.low + (rule.high - rule.low) * s)
 }
 
 /** An inventory's value at its market's prices; goods with no price count 0 and are listed as unpriced. */
-export function inventoryValue(state: EconomyState, config: EconomyConfig, inventory: string): { value: number; unpriced: string[] } {
+export function inventoryValue(state: EconomyState, config: EconomyConfig, inventory: string, currency = 'money'): { value: number; unpriced: string[] } {
   const inv = state.inventories[inventory]
   if (!inv) throw new Error(`unknown inventory: ${inventory}`)
   let value = 0
   const unpriced: string[] = []
   for (const [good, units] of Object.entries(inv.stock)) {
-    const p = price(state, config, inv.market, good)
+    const p = price(state, config, inv.market, good, currency)
     if (p === null) unpriced.push(good)
     else value += p * units
   }
@@ -87,6 +89,7 @@ export function totalUnits(state: EconomyState, good: string): number {
 }
 
 export interface Accounts {
+  currency?: string
   holder: string
   fromDay: number
   toDay: number
@@ -104,9 +107,11 @@ export interface Accounts {
 
 /** The accounting view (CONTRACTS.md §8): a pure read over the ledger provider's rows and the holder's inventories.
  *  Never state: the ledger stays the record. A row the holder both pays and receives counts on neither side. */
-export function accounts(state: EconomyState, config: EconomyConfig, ledger: LedgerProvider, holder: string, fromDay: number, toDay: number): Accounts {
+export function accounts(state: EconomyState, config: EconomyConfig, ledger: LedgerProvider, holder: string, fromDay: number, toDay: number, currency = 'money'): Accounts {
   const out: Accounts = { holder, fromDay, toDay, revenue: 0, purchases: 0, wages: 0, rent: 0, freight: 0, otherIn: 0, otherOut: 0, profit: 0, inventoryValue: 0, unpriced: [] }
+  if (currency !== 'money') out.currency = currency
   for (const row of ledger.rows(holder, fromDay, toDay)) {
+    if ((row.currency ?? 'money') !== currency) continue
     if (row.from === holder && row.to === holder) continue
     if (row.to === holder) { if (row.kind === 'sale') out.revenue += row.amount; else out.otherIn += row.amount }
     else if (row.from === holder) {
@@ -120,7 +125,7 @@ export function accounts(state: EconomyState, config: EconomyConfig, ledger: Led
   out.profit = out.revenue + out.otherIn - (out.purchases + out.wages + out.rent + out.freight + out.otherOut)
   for (const inv of Object.values(state.inventories)) {
     if (inv.holder !== holder) continue
-    const v = inventoryValue(state, config, inv.id)
+    const v = inventoryValue(state, config, inv.id, currency)
     out.inventoryValue += v.value
     for (const g of v.unpriced) if (!out.unpriced.includes(g)) out.unpriced.push(g)
   }

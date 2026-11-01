@@ -177,3 +177,21 @@ unfixed hosts: none
 | X9 | optional host seam | missing exchange throws the contract error |
 | X10 | one-currency compatibility | three-ports state JSON has no currencies key |
 | X11 | replay | currency definitions, exchanges, barter and refusals replay state, events and ledger byte for byte |
+
+## Q — stall quotes per currency (design v2 §5.3)
+
+`test/currency-trade.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| Q1 | buy in pieces | one exchange, exact money and goods deltas, pieces row and event |
+| Q2 | sell in pieces | one exchange, exact money and goods deltas, pieces row and event |
+| Q3 | shortage pricing | same multiple in every quoted currency under linear and table rules |
+| Q4 | caused not-accepted | one refusal and failed outcome with holder, currency and purpose; no movement or conversion |
+| Q5 | uncaused not-accepted | missing quote throws even with an explicit price |
+| Q6 | unknown currency | buy, sell and quote reject unknown ids without effects |
+| Q7 | currency limits | pieces priceMax and priceMin refuse without movement |
+| Q8 | separate accounts | rows never cross currencies; inventory uses that currency's quote or is unpriced |
+| Q9 | money compatibility | legacy state, event and row bytes; optional currency fields absent |
+| Q10 | quote updates | only basePrice allowed; valid prices and opaque ids; money base untouched |
+| Q11 | provider seam and self trade | no self goods leg; missing exchange throws the contract error |

@@ -11,8 +11,8 @@ import type { Good, MarketMode, Recipe } from './state.ts'
 import { tick } from './tick/index.ts'
 
 export type CommandCause = { cause?: string }
-export type Buy = CommandCause & { type: 'buy'; inventory: string; good: string; units: number; price?: number; priceMax?: number }
-export type Sell = CommandCause & { type: 'sell'; inventory: string; good: string; units: number; price?: number; priceMin?: number }
+export type Buy = CommandCause & { type: 'buy'; currency?: string; inventory: string; good: string; units: number; price?: number; priceMax?: number }
+export type Sell = CommandCause & { type: 'sell'; currency?: string; inventory: string; good: string; units: number; price?: number; priceMin?: number }
 
 export type TakeMass = CommandCause & { type: 'takeMass'; inventory: string; good: string; kg: number }
 export type AddMass = CommandCause & { type: 'addMass'; inventory: string; good: string; kg: number }
@@ -26,7 +26,7 @@ export type Command = CommandCause & (
   | { type: 'defineRecipe'; recipe: Recipe }
   | { type: 'openInventory'; holder: string; market: string }
   | { type: 'openMarket'; id: string; mode: MarketMode }
-  | { type: 'setMarketGood'; market: string; good: string; consumptionPerDay?: number | null; targetReserve?: number | null; productionPerDay?: number | null; basePrice?: number | null; perCapitaPerDay?: number | null }
+  | { type: 'setMarketGood'; currency?: string; market: string; good: string; consumptionPerDay?: number | null; targetReserve?: number | null; productionPerDay?: number | null; basePrice?: number | null; perCapitaPerDay?: number | null }
   | { type: 'addStock'; inventory: string; good: string; units: number }      // the host seeds or imports stock
   | { type: 'removeStock'; inventory: string; good: string; units: number }   // the host's exit (a quest, a wreck); refused beyond stock
   | { type: 'moveStock'; from: string; to: string; good: string; units: number }
@@ -56,8 +56,8 @@ export function apply(ctx: Ctx, command: Command): void {
     case 'takeMass': return transferMass(ctx, command)
     case 'addMass': return transferMass(ctx, command)
     case 'openOrganisation': return openOrganisation(ctx, command.name, command.kind ?? null)
-    case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price, command.priceMin, command.cause)
-    case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price, command.priceMax, command.cause)
+    case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price, command.priceMin, command.cause, command.currency)
+    case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price, command.priceMax, command.cause, command.currency)
     case 'ship': return ship(ctx, command.from, command.to, command.good, command.units, command.freight ?? null)
     case 'tick': return tick(ctx)
     default: throw new Error(`unknown command: ${(command as { type: string }).type}`)
@@ -119,6 +119,21 @@ function openMarket(ctx: Ctx, id: string, mode: MarketMode): void {
 function setMarketGood(ctx: Ctx, cmd: Extract<Command, { type: 'setMarketGood' }>): void {
   const mkt = market(ctx, cmd.market)
   good(ctx, cmd.good)
+  const currency = cmd.currency ?? 'money'
+  if (!isCurrency(ctx.state, currency)) throw new Error(`unknown currency: ${currency}`)
+  if (currency !== 'money') {
+    for (const key of ['consumptionPerDay', 'targetReserve', 'productionPerDay', 'perCapitaPerDay'] as const) {
+      if (key in cmd) throw new Error(`only basePrice may be set with currency: ${currency}`)
+    }
+    if (cmd.basePrice !== undefined) {
+      if (cmd.basePrice !== null) finite(cmd.basePrice, 'basePrice', 0)
+      const entry = marketGood(mkt, cmd.good)
+      entry.basePrices ??= {}
+      Object.defineProperty(entry.basePrices, currency, { value: cmd.basePrice, enumerable: true, writable: true, configurable: true })
+    }
+    ctx.events.push({ type: 'marketGoodSet', market: cmd.market, good: cmd.good })
+    return
+  }
   const entry = marketGood(mkt, cmd.good)
   for (const key of ['consumptionPerDay', 'targetReserve', 'productionPerDay', 'basePrice', 'perCapitaPerDay'] as const) {
     if (!(key in cmd)) continue
@@ -215,12 +230,19 @@ function openOrganisation(ctx: Ctx, name: string, kind: string | null): void {
 /** A sale or purchase between an inventory and its market's own stock, at the market's price today unless the host
  *  names one (CONTRACTS.md §7). Money moves through the ledger provider only (§3); the two holders are the inventory's
  *  holder and the market id. With no price on the market and none given, the trade is refused: a price is open, never invented. */
-function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, units: number, given: number | undefined, limit: number | undefined, cause: string | undefined): void {
+function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, units: number, given: number | undefined, limit: number | undefined, cause: string | undefined, currency = 'money'): void {
   const inv = inventory(ctx, invId); good(ctx, goodId); finite(units, 'units', 0)
   if (units === 0) throw new Error('units must be > 0')
   const mkt = market(ctx, inv.market)
   const stall = inventory(ctx, mkt.inventory)
-  const unit = given ?? priceOf(ctx.state, ctx.config, mkt.id, goodId)
+  if (!isCurrency(ctx.state, currency)) throw new Error(`unknown currency: ${currency}`)
+  if (currency !== 'money' && priceOf(ctx.state, ctx.config, mkt.id, goodId, currency) === null) {
+    if (cause === undefined) throw new Error(`not accepted: ${currency} for ${goodId} in ${mkt.id}`)
+    ctx.events.push({ type: 'refused', command: side, reason: 'not-accepted', price: null,
+      currency, market: mkt.id, refusedBy: stall.holder })
+    return
+  }
+  const unit = given ?? priceOf(ctx.state, ctx.config, mkt.id, goodId, currency)
   if (cause !== undefined) {
     if (limit !== undefined) finite(limit, side === 'buy' ? 'priceMax' : 'priceMin', 0)
     if (unit === null) {
@@ -250,6 +272,18 @@ function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, un
   }
   const amount = unit * units
   const note = `${units} @ ${unit}`
+  if (currency !== 'money') {
+    if (!ctx.providers.ledger.exchange) throw new Error('ledger provider has no exchange (CONTRACTS §22)')
+    const selling = side === 'sell'
+    const txns = ctx.providers.ledger.exchange({
+      money: [{ from: selling ? mkt.id : inv.holder, to: selling ? inv.holder : mkt.id, currency, amount }],
+      ...(selfTrade ? {} : { goods: [{ from: selling ? inv.id : stall.id, to: selling ? stall.id : inv.id, good: goodId, units }] }),
+    }, selling ? 'sale' : 'purchase', goodId, note, selfTrade ? undefined : goodsLedger(ctx, side))
+    if (selfTrade) moveSelf()
+    ctx.events.push({ type: selling ? 'sold' : 'bought', inventory: invId, market: mkt.id, good: goodId,
+      units, price: unit, amount, txn: txns[0], currency })
+    return
+  }
   if (side === 'sell') {
     const txn = selfTrade
       ? ctx.providers.ledger.transfer(mkt.id, inv.holder, amount, 'sale', goodId, note)
