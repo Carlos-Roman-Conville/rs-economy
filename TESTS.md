@@ -123,7 +123,7 @@ acceptance. Planned: consumption from a realism population provider (PLAN step 1
 | O9 | bad input | invalid numbers, references, weights and empty causes throw; Runner state, events and log unchanged |
 | open | buying beyond the money held | CONTRACTS Â§3 lets balances go negative (debt), so a caused buy with too little money completes with a `completed` outcome and the buyer in debt; whether a mind may buy beyond its money (refused `insufficient-funds` with the shortfall) is a rule open for Rex (economy ISSUES ECON-26); Economy does not catch or reinterpret provider throws |
 
-## T — goods transfers on kernel transfer() (PLATFORM §7a)
+## T â€” goods transfers on kernel transfer() (PLATFORM Â§7a)
 
 `test/goods-ledger.test.ts`
 
