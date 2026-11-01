@@ -5,7 +5,8 @@ import { simTime, transfer, TransferJournal } from '@rex/kernel'
 import { goodsLedger } from './goods-ledger.ts'
 import { adjust, finite, good, integer, inventory, market, marketGood, must, newId, nonempty, recipe, stockOf, type Ctx } from './context.ts'
 import { availableUnits, consumeInputs } from './material.ts'
-import { price as priceOf } from './queries.ts'
+import { isCurrency, price as priceOf } from './queries.ts'
+import type { MoneyLeg, GoodsLeg } from './providers.ts'
 import type { Good, MarketMode, Recipe } from './state.ts'
 import { tick } from './tick/index.ts'
 
@@ -17,6 +18,8 @@ export type TakeMass = CommandCause & { type: 'takeMass'; inventory: string; goo
 export type AddMass = CommandCause & { type: 'addMass'; inventory: string; good: string; kg: number }
 
 export type Command = CommandCause & (
+  | { type: 'defineCurrency'; currency: { id: string; issuer?: string | null; backing?: string | null } }
+  | { type: 'exchange'; legs: { money?: MoneyLeg[]; goods?: GoodsLeg[] }; kind?: string; subject?: string | null; note?: string }
   | TakeMass
   | AddMass
   | { type: 'defineGood'; good: Good }
@@ -38,6 +41,8 @@ export type Command = CommandCause & (
 
 export function apply(ctx: Ctx, command: Command): void {
   switch (command.type) {
+    case 'defineCurrency': return defineCurrency(ctx, command.currency)
+    case 'exchange': return exchange(ctx, command)
     case 'defineGood': return defineGood(ctx, command.good)
     case 'defineRecipe': return defineRecipe(ctx, command.recipe)
     case 'openInventory': return openInventory(ctx, command.holder, command.market)
@@ -287,4 +292,49 @@ function ship(ctx: Ctx, fromId: string, toId: string, goodId: string, units: num
   })
   ctx.minted = id
   ctx.events.push({ type: 'shipped', shipment: id, from: fromId, to: toId, good: goodId, units, arrives, freightTxn })
+}
+
+function defineCurrency(ctx: Ctx, def: { id: string; issuer?: string | null; backing?: string | null }): void {
+  nonempty(def.id, 'currency.id')
+  if (def.id === 'money') throw new Error('money is always a currency')
+  if (isCurrency(ctx.state, def.id)) throw new Error(`currency already defined: ${def.id}`)
+  if (def.backing != null) good(ctx, def.backing)
+  ctx.state.currencies ??= {}
+  Object.defineProperty(ctx.state.currencies, def.id, { value: { id: def.id, issuer: def.issuer ?? null,
+    backing: def.backing ?? null }, enumerable: true, writable: true, configurable: true })
+  ctx.events.push({ type: 'currencyDefined', currency: def.id })
+}
+
+function exchange(ctx: Ctx, command: Extract<Command, { type: 'exchange' }>): void {
+  const money = command.legs.money ?? []
+  const goods = command.legs.goods
+  for (const leg of money) {
+    if (!isCurrency(ctx.state, leg.currency)) throw new Error(`unknown currency: ${leg.currency}`)
+    nonempty(leg.from, 'from'); nonempty(leg.to, 'to'); finite(leg.amount, 'amount', 0)
+  }
+  for (const leg of goods ?? []) {
+    inventory(ctx, leg.from); inventory(ctx, leg.to); good(ctx, leg.good); finite(leg.units, 'units', 0)
+  }
+  if (!ctx.providers.ledger.exchange) throw new Error('ledger provider has no exchange (CONTRACTS §22)')
+  // Project the ordered goods legs so repeated debits and earlier credits are checked before any money moves.
+  const stocks = new Map<string, Map<string, number>>()
+  for (const leg of goods ?? []) {
+    const held = (id: string) => {
+      if (!stocks.has(id)) stocks.set(id, new Map(Object.entries(inventory(ctx, id).stock)))
+      return stocks.get(id)!
+    }
+    const from = held(leg.from); const to = held(leg.to)
+    const available = from.get(leg.good) ?? 0
+    if (leg.units > available) {
+      if (command.cause === undefined) throw new Error(`cannot exchange ${leg.units} ${leg.good}: have ${available}`)
+      ctx.events.push({ type: 'refused', command: 'exchange', reason: 'beyond-stock', price: null,
+        units: leg.units, available })
+      return
+    }
+    from.set(leg.good, available - leg.units)
+    to.set(leg.good, (to.get(leg.good) ?? 0) + leg.units)
+  }
+  const txns = ctx.providers.ledger.exchange({ money, ...(goods ? { goods } : {}) }, command.kind ?? 'exchange',
+    command.subject ?? null, command.note ?? '', goods ? goodsLedger(ctx, 'exchange') : undefined)
+  ctx.events.push({ type: 'exchanged', money, goods, txns })
 }

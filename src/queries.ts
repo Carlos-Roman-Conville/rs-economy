@@ -126,3 +126,12 @@ export function accounts(state: EconomyState, config: EconomyConfig, ledger: Led
   }
   return out
 }
+
+/** Currency membership is pure; money always exists. */
+export function isCurrency(state: EconomyState, id: string): boolean {
+  return id === 'money' || Object.hasOwn(state.currencies ?? {}, id)
+}
+
+export function currencyProvider(get: () => EconomyState): { isCurrency(id: string): boolean } {
+  return { isCurrency: id => isCurrency(get(), id) }
+}

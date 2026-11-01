@@ -159,3 +159,21 @@ Searched `E:/AI Programs/Toolchain` (no package depends on `@rex/economy`; `Real
 | economy `StubLedger` (in-package reference) | `src/providers.ts:70` | yes: builds a money ledger and one kernel transfer with both legs |
 
 unfixed hosts: none
+
+## X — currencies and exchange (CONTRACTS §22)
+
+`test/exchange.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| X1 | currency records | nullable metadata, definition event, pure live membership; empty, money, duplicate and unknown backing refuse |
+| X2 | multi-currency conservation | every asset moves exactly, debt allowed, ordered rows share first id as batch; money omits currency |
+| X3 | barter | ordered goods legs move with no money rows |
+| X4 | skipped legs | zero/self money still writes rows; zero goods emits no stock event |
+| X5 | atomic refusal | late goods overdraw restores both currencies, earlier goods, rows and events |
+| X6 | validation | unknown currency, invalid numbers, missing ledger and invalid references throw before effects |
+| X7 | unseen balances | known but unmoved currencies read zero without mutation |
+| X8 | outcomes | caused completion counts legs/rows; cumulative overdraw refuses before provider call; uncaused overdraw throws |
+| X9 | optional host seam | missing exchange throws the contract error |
+| X10 | one-currency compatibility | three-ports state JSON has no currencies key |
+| X11 | replay | currency definitions, exchanges, barter and refusals replay state, events and ledger byte for byte |

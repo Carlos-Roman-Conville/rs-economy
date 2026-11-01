@@ -1,16 +1,22 @@
 // What this engine asks of the host (CONTRACTS.md §3, §4b, §4c, §5). The engine imports no other engine; the host
 // implements these from @rex/settlement, @rex/realism, its map and its population model, or the stubs below.
 
-import { simTime, transfer, TransferJournal, type TransferLedger, type TransferRequest } from '@rex/kernel'
+import { finite, nonempty, simTime, transfer, TransferJournal, type TransferLedger, type TransferRequest } from '@rex/kernel'
+
+export interface MoneyLeg { from: string; to: string; currency: string; amount: number }
+export interface GoodsLeg { from: string; to: string; good: string; units: number }
 
 export interface LedgerRow {
+  currency?: string; batch?: string; process?: string
   id: string; day: number; kind: string; from: string | null; to: string | null
   subject: string | null; amount: number; authority: string | null; note: string
 }
 
 /** Money has one home (§3): Settlement's accounts in the pirate game. Economy keeps no balances. */
 export interface LedgerProvider {
-  balance(holder: string): number
+  balance(holder: string, currency?: string): number
+  /** The pirate host adds this optional seam in unit 5269. */
+  exchange?(legs: { money: MoneyLeg[]; goods?: GoodsLeg[] }, kind: string, subject: string | null, note?: string, goods?: TransferLedger): string[]
   transfer(from: string, to: string, amount: number, kind: string, subject: string | null, note?: string,
     /** The goods leg of a paid exchange. `ledger` is the economy's goods TransferLedger, built by the economy inside
      *  the command that calls `transfer`; `from` and `to` are its accounts (inventory ids), `good` its quantity (a good
@@ -66,7 +72,64 @@ export class StubLedger implements LedgerProvider {
   balances: Record<string, number> = {}
   log: LedgerRow[] = []
   day = 0
-  balance(holder: string): number { return this.balances[holder] ?? 0 }
+  byCurrency: Record<string, Record<string, number>> = {}
+  currencies?: { isCurrency(id: string): boolean }
+  private checkCurrency(id: string): void {
+    if (id !== 'money' && !this.currencies?.isCurrency(id)) throw new Error(`unknown currency: ${id}`)
+  }
+  balance(holder: string, currency = 'money'): number {
+    this.checkCurrency(currency)
+    const balances = currency === 'money' ? this.balances : this.byCurrency[currency]
+    return balances && Object.hasOwn(balances, holder) ? balances[holder] : 0
+  }
+  exchange(legs: { money: MoneyLeg[]; goods?: GoodsLeg[] }, kind: string, subject: string | null,
+    note = '', goods?: TransferLedger): string[] {
+    if (legs.goods !== undefined && !goods) throw new Error('goods legs require a goods ledger')
+    if (goods && legs.goods === undefined) throw new Error('goods ledger requires goods legs')
+    for (const leg of legs.money) {
+      this.checkCurrency(leg.currency)
+      nonempty(leg.from, 'from'); nonempty(leg.to, 'to'); finite(leg.amount, 'amount', 0)
+    }
+    for (const leg of legs.goods ?? []) {
+      nonempty(leg.from, 'from'); nonempty(leg.to, 'to'); nonempty(leg.good, 'good'); finite(leg.units, 'units', 0)
+      goods!.unit(leg.from, leg.good); goods!.unit(leg.to, leg.good)
+    }
+    const money: TransferLedger = {
+      id: 'stub.money',
+      unit: (_account, currency) => { this.checkCurrency(currency); return 'money' },
+      apply: (account, currency, delta) => {
+        const next = this.balance(account, currency) + delta
+        if (currency !== 'money' && !Object.hasOwn(this.byCurrency, currency)) {
+          Object.defineProperty(this.byCurrency, currency, { value: {}, enumerable: true, writable: true, configurable: true })
+        }
+        const balances = currency === 'money' ? this.balances : this.byCurrency[currency]
+        Object.defineProperty(balances, account, { value: next, enumerable: true, writable: true, configurable: true })
+      },
+      snapshot: () => structuredClone({ balances: this.balances, byCurrency: this.byCurrency }),
+      restore: snapshot => {
+        const saved = snapshot as { balances: Record<string, number>; byCurrency: Record<string, Record<string, number>> }
+        this.balances = saved.balances; this.byCurrency = saved.byCurrency
+      },
+    }
+    const t = simTime(this.day * 86_400_000)
+    const requests: TransferRequest[] = []
+    for (const leg of legs.money) if (leg.amount > 0 && leg.from !== leg.to) requests.push({
+      t, process: 'economy.trade.trade', quantity: leg.currency, unit: 'money', amount: leg.amount,
+      from: { ledger: money, account: leg.from }, to: { ledger: money, account: leg.to },
+    })
+    for (const leg of legs.goods ?? []) if (leg.units > 0) requests.push({
+      t, process: 'economy.trade.trade', quantity: leg.good, unit: goods!.unit(leg.from, leg.good), amount: leg.units,
+      from: { ledger: goods!, account: leg.from }, to: { ledger: goods!, account: leg.to },
+    })
+    transfer(new TransferJournal('economy.stub-ledger'), ...requests)
+    const batch = `txn.${String(this.log.length + 1).padStart(4, '0')}`
+    return legs.money.map(({ from, to, currency, amount }) => {
+      const id = `txn.${String(this.log.length + 1).padStart(4, '0')}`
+      this.log.push({ id, day: this.day, kind, from, to, subject, amount, authority: null, note,
+        ...(currency === 'money' ? {} : { currency }), batch })
+      return id
+    })
+  }
   transfer(from: string, to: string, amount: number, kind: string, subject: string | null, note = '',
     goods?: { ledger: TransferLedger; from: string; to: string; good: string; units: number }): string {
     if (!Number.isFinite(amount) || amount < 0) throw new Error(`amount must be a number >= 0`)

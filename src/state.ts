@@ -86,7 +86,10 @@ export interface Organisation {
   inventories: string[]
 }
 
+export interface Currency { id: string; issuer: string | null; backing: string | null }
+
 export interface EconomyState {
+  currencies?: Record<string, Currency>
   version: 1
   day: number
   counters: Counters
