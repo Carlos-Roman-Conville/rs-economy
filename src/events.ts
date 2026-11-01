@@ -1,14 +1,18 @@
+import type { AssetUnits } from './state.ts'
 // Events the reducer returns. The host folds them; the engine never pushes.
 
 import type { MoneyLeg, GoodsLeg } from './providers.ts'
 
-export type Refused = { type: 'refused'; command: 'buy' | 'sell' | 'takeMass' | 'exchange'; reason: 'price-above-limit' | 'price-below-limit' | 'no-price' | 'beyond-stock' | 'no-stock' | 'not-accepted'; currency?: string; market?: string; refusedBy?: string; price: number | null; limit?: number; units?: number; available?: number; cause?: string }
+export type Refused = { type: 'refused'; command: 'buy' | 'sell' | 'takeMass' | 'exchange' | 'offer' | 'accept'; reason: 'price-above-limit' | 'price-below-limit' | 'no-price' | 'beyond-stock' | 'no-stock' | 'not-accepted' | 'no-offer'; currency?: string; market?: string; refusedBy?: string; price: number | null; limit?: number; units?: number; available?: number; cause?: string }
 
 export type ActionOutcome = { type: 'shared.action.outcome'; cause: string; status: 'completed' | 'failed'; stimuli: Record<string, string | number | null>[]; payload: EconomyEvent }
 
 export type EconomyEvent = { cause?: string } & (
   | { type: 'currencyDefined'; currency: string }
   | { type: 'exchanged'; money: MoneyLeg[]; goods: GoodsLeg[] | undefined; txns: string[] }
+  | { type: 'offerPosted'; offer: string; market: string; by: string }
+  | { type: 'offerFilled'; offer: string; maker: string; taker: string; gave: AssetUnits; got: AssetUnits }
+  | { type: 'offerWithdrawn'; offer: string; reason: 'owner' | 'expired' | 'unfilled' }
   | Refused
   | ActionOutcome
   | { type: 'goodDefined'; good: string }

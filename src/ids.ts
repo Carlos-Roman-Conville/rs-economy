@@ -4,6 +4,6 @@
 
 export { mint } from '@rex/kernel'
 
-export const PREFIXES = ['inv', 'mkt', 'ship', 'ord', 'org'] as const
+export const PREFIXES = ['inv', 'mkt', 'ship', 'ord', 'org', 'offer'] as const
 export type Prefix = (typeof PREFIXES)[number]
 export type Counters = Partial<Record<Prefix, number>>

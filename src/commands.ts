@@ -7,7 +7,7 @@ import { adjust, finite, good, integer, inventory, market, marketGood, must, new
 import { availableUnits, consumeInputs } from './material.ts'
 import { isCurrency, price as priceOf } from './queries.ts'
 import type { MoneyLeg, GoodsLeg } from './providers.ts'
-import type { Good, MarketMode, Recipe } from './state.ts'
+import type { Asset, AssetUnits, Offer, Good, MarketMode, Recipe } from './state.ts'
 import { tick } from './tick/index.ts'
 
 export type CommandCause = { cause?: string }
@@ -19,7 +19,10 @@ export type AddMass = CommandCause & { type: 'addMass'; inventory: string; good:
 
 export type Command = CommandCause & (
   | { type: 'defineCurrency'; currency: { id: string; issuer?: string | null; backing?: string | null } }
-  | { type: 'exchange'; legs: { money?: MoneyLeg[]; goods?: GoodsLeg[] }; kind?: string; subject?: string | null; note?: string }
+  | { type: 'offer'; market: string; by: string; inventory: string; give: AssetUnits; want: AssetUnits; expires?: number | null }
+  | { type: 'accept'; offer: string; by: string; inventory: string; units?: number }
+  | { type: 'withdraw'; offer: string; by: string }
+  | { type: 'exchange'; market?: string; legs: { money?: MoneyLeg[]; goods?: GoodsLeg[] }; kind?: string; subject?: string | null; note?: string }
   | TakeMass
   | AddMass
   | { type: 'defineGood'; good: Good }
@@ -42,6 +45,9 @@ export type Command = CommandCause & (
 export function apply(ctx: Ctx, command: Command): void {
   switch (command.type) {
     case 'defineCurrency': return defineCurrency(ctx, command.currency)
+    case 'offer': return postOffer(ctx, command)
+    case 'accept': return acceptOffer(ctx, command)
+    case 'withdraw': return withdrawOffer(ctx, command)
     case 'exchange': return exchange(ctx, command)
     case 'defineGood': return defineGood(ctx, command.good)
     case 'defineRecipe': return defineRecipe(ctx, command.recipe)
@@ -340,6 +346,7 @@ function defineCurrency(ctx: Ctx, def: { id: string; issuer?: string | null; bac
 }
 
 function exchange(ctx: Ctx, command: Extract<Command, { type: 'exchange' }>): void {
+  if (command.market !== undefined) market(ctx, command.market)
   const money = command.legs.money ?? []
   const goods = command.legs.goods
   for (const leg of money) {
@@ -371,4 +378,136 @@ function exchange(ctx: Ctx, command: Extract<Command, { type: 'exchange' }>): vo
   const txns = ctx.providers.ledger.exchange({ money, ...(goods ? { goods } : {}) }, command.kind ?? 'exchange',
     command.subject ?? null, command.note ?? '', goods ? goodsLedger(ctx, 'exchange') : undefined)
   ctx.events.push({ type: 'exchanged', money, goods, txns })
+  if (command.market !== undefined) {
+    const legs = [
+      ...money.map(l => ({ from: l.from, to: l.to, asset: { currency: l.currency } as Asset, units: l.amount })),
+      ...(goods ?? []).map(l => ({ from: inventory(ctx, l.from).holder, to: inventory(ctx, l.to).holder,
+        asset: { good: l.good } as Asset, units: l.units })),
+    ].filter(l => l.units > 0)
+    if (legs.length === 2) {
+      const [a, b] = legs
+      if (a.from !== a.to && a.from === b.to && a.to === b.from && !sameAsset(a.asset, b.asset)) {
+        (ctx.state.trades ??= []).push({ day: ctx.state.day, market: command.market,
+          offer: command.subject ?? '', maker: a.from, taker: a.to,
+          gave: { asset: a.asset, units: a.units }, got: { asset: b.asset, units: b.units } })
+      }
+    }
+  }
+}
+
+function sameAsset(a: Asset, b: Asset): boolean {
+  return 'good' in a ? 'good' in b && a.good === b.good : 'currency' in b && a.currency === b.currency
+}
+function validateAsset(ctx: Ctx, q: AssetUnits): void {
+  if (('good' in q.asset) === ('currency' in q.asset)) throw new Error('asset must name one good or currency')
+  if ('good' in q.asset) good(ctx, q.asset.good)
+  else if (!isCurrency(ctx.state, q.asset.currency)) throw new Error(`unknown currency: ${q.asset.currency}`)
+  positive(q.units)
+}
+function positive(units: number): void {
+  finite(units, 'units', 0)
+  if (units === 0) throw new Error('units must be > 0')
+}
+function offerInventory(ctx: Ctx, id: string, by: string, marketId: string): void {
+  nonempty(by, 'by')
+  const inv = inventory(ctx, id)
+  if (inv.holder !== by || inv.market !== marketId) throw new Error('offer inventory must belong to holder on market')
+}
+function shortfall(ctx: Ctx, command: 'offer' | 'accept', cause: string | undefined, id: string, q: AssetUnits): boolean {
+  if (!('good' in q.asset)) return false // No balance rule (Q19 / ECON-26).
+  const available = stockOf(inventory(ctx, id), q.asset.good)
+  if (q.units <= available) return false
+  if (cause === undefined) throw new Error(`beyond stock: ${q.units}, have ${available}`)
+  ctx.events.push({ type: 'refused', command, reason: 'beyond-stock', price: null, units: q.units, available })
+  return true
+}
+function removeOffer(ctx: Ctx, marketId: string, offer: Offer, reason?: 'owner' | 'unfilled'): void {
+  const mkt = market(ctx, marketId)
+  mkt.offers = mkt.offers!.filter(o => o.id !== offer.id)
+  if (reason) ctx.events.push({ type: 'offerWithdrawn', offer: offer.id, reason })
+}
+function fillOffer(ctx: Ctx, marketId: string, offer: Offer, by: string, inv: string, units: number): boolean {
+  const gave = { asset: offer.give.asset, units }
+  const got = { asset: offer.want.asset, units: units * (offer.want.units / offer.give.units) }
+  positive(got.units)
+  const money: MoneyLeg[] = []; const goods: GoodsLeg[] = []
+  const leg = (q: AssetUnits, from: string, to: string, fromInv: string, toInv: string) => {
+    if ('currency' in q.asset) money.push({ from, to, currency: q.asset.currency, amount: q.units })
+    else goods.push({ from: fromInv, to: toInv, good: q.asset.good, units: q.units })
+  }
+  leg(gave, offer.by, by, offer.inventory, inv); leg(got, by, offer.by, inv, offer.inventory)
+  if (!ctx.providers.ledger.exchange) throw new Error('ledger provider has no exchange (CONTRACTS §22)')
+  try {
+    ctx.providers.ledger.exchange({ money, ...(goods.length ? { goods } : {}) }, 'exchange', offer.id, '',
+      goods.length ? goodsLedger(ctx, 'exchange') : undefined)
+  } catch {
+    removeOffer(ctx, marketId, offer, 'unfilled')
+    return false
+  }
+  offer.remaining = units === offer.remaining ? 0 : offer.remaining - units
+  if (offer.remaining === 0) removeOffer(ctx, marketId, offer)
+  ;(ctx.state.trades ??= []).push({ day: ctx.state.day, market: marketId, offer: offer.id, maker: offer.by, taker: by, gave, got })
+  ctx.events.push({ type: 'offerFilled', offer: offer.id, maker: offer.by, taker: by, gave, got })
+  return true
+}
+function postOffer(ctx: Ctx, cmd: Extract<Command, { type: 'offer' }>): void {
+  const mkt = market(ctx, cmd.market)
+  offerInventory(ctx, cmd.inventory, cmd.by, cmd.market)
+  validateAsset(ctx, cmd.give); validateAsset(ctx, cmd.want)
+  if (sameAsset(cmd.give.asset, cmd.want.asset)) throw new Error('offer assets must differ')
+  if (cmd.expires != null) finite(cmd.expires, 'expires', 0)
+  const ratio = cmd.want.units / cmd.give.units
+  positive(ratio)
+  if (shortfall(ctx, 'offer', cmd.cause, cmd.inventory, cmd.give)) return
+  const incoming: Offer = { id: newId(ctx, 'offer'), by: cmd.by, inventory: cmd.inventory,
+    give: structuredClone(cmd.give), want: structuredClone(cmd.want), remaining: cmd.give.units,
+    day: ctx.state.day, expires: cmd.expires ?? null }
+  ctx.minted = incoming.id
+  // Stable sorting preserves mint/insertion order at equal prices, including ids beyond four digits.
+  const resting = (mkt.offers ?? []).filter(o => (o.expires === null || o.expires >= ctx.state.day)
+    && sameAsset(o.give.asset, cmd.want.asset) && sameAsset(o.want.asset, cmd.give.asset)
+    && ratio * (o.want.units / o.give.units) <= 1)
+    .sort((a, b) => a.want.units / a.give.units - b.want.units / b.give.units)
+  let wanted = cmd.want.units
+  for (const o of resting) {
+    if (incoming.remaining <= 0 || wanted <= 0) break
+    const r = o.want.units / o.give.units
+    const units = Math.min(wanted, o.remaining, incoming.remaining / r)
+    if (fillOffer(ctx, mkt.id, o, cmd.by, cmd.inventory, units)) {
+      incoming.remaining = Math.max(0, incoming.remaining - units * r)
+      wanted -= units
+    }
+  }
+  if (incoming.remaining > 0) {
+    (mkt.offers ??= []).push(incoming)
+    ctx.events.push({ type: 'offerPosted', offer: incoming.id, market: mkt.id, by: cmd.by })
+  }
+}
+function findOffer(ctx: Ctx, id: string) {
+  for (const mkt of Object.values(ctx.state.markets)) {
+    const offer = mkt.offers?.find(o => o.id === id)
+    if (offer) return { mkt, offer }
+  }
+  return undefined
+}
+function acceptOffer(ctx: Ctx, cmd: Extract<Command, { type: 'accept' }>): void {
+  if (cmd.units !== undefined) positive(cmd.units)
+  const found = findOffer(ctx, cmd.offer)
+  if (!found || (found.offer.expires !== null && found.offer.expires < ctx.state.day)) {
+    if (cmd.cause === undefined) throw new Error(`no offer: ${cmd.offer}`)
+    ctx.events.push({ type: 'refused', command: 'accept', reason: 'no-offer', price: null }); return
+  }
+  const { mkt, offer } = found
+  offerInventory(ctx, cmd.inventory, cmd.by, mkt.id)
+  const units = Math.min(cmd.units ?? offer.remaining, offer.remaining)
+  const payment = { asset: offer.want.asset, units: units * (offer.want.units / offer.give.units) }
+  positive(payment.units)
+  if (shortfall(ctx, 'accept', cmd.cause, cmd.inventory, payment)) return
+  fillOffer(ctx, mkt.id, offer, cmd.by, cmd.inventory, units)
+}
+function withdrawOffer(ctx: Ctx, cmd: Extract<Command, { type: 'withdraw' }>): void {
+  const found = findOffer(ctx, cmd.offer)
+  if (!found) throw new Error(`no offer: ${cmd.offer}`)
+  if (found.offer.by !== cmd.by) throw new Error('only the owner may withdraw')
+  removeOffer(ctx, found.mkt.id, found.offer, 'owner')
 }

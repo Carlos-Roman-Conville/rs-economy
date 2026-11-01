@@ -115,6 +115,13 @@ export function advance(ctx: Ctx): void {
 export const STEPS: Record<string, Step> = { production, shipments, spoilage, consumption, prices, advance }
 
 export function tick(ctx: Ctx): void {
+  for (const mkt of Object.values(ctx.state.markets)) {
+    if (mkt.offers) mkt.offers = mkt.offers.filter(offer => {
+      if (offer.expires === null || offer.expires >= ctx.state.day) return true
+      ctx.events.push({ type: 'offerWithdrawn', offer: offer.id, reason: 'expired' })
+      return false
+    })
+  }
   const journal = new TransferJournal('economy.goods')
   ctx.state.tickTrace = []
   for (const name of ctx.config.tickOrder) {

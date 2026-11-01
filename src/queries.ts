@@ -3,7 +3,7 @@
 import { assertPriceRule, type EconomyConfig } from './config.ts'
 import { must } from './context.ts'
 import type { LedgerProvider } from './providers.ts'
-import type { EconomyState } from './state.ts'
+import type { Asset, EconomyState } from './state.ts'
 
 /** Kilograms represented by units of a good; null when its mass is unknown. */
 export function massOf(state: EconomyState, good: string, units: number): number | null {
@@ -139,4 +139,31 @@ export function isCurrency(state: EconomyState, id: string): boolean {
 
 export function currencyProvider(get: () => EconomyState): { isCurrency(id: string): boolean } {
   return { isCurrency: id => isCurrency(get(), id) }
+}
+
+const assetKey = (asset: Asset): string => 'good' in asset ? `good:${asset.good}` : `currency:${asset.currency}`
+
+/** Completed fills only, in recorded order; both directions are expressed as b per a. */
+export function ratios(state: EconomyState, market: string, a: Asset, b: Asset, fromDay: number, toDay: number): { day: number; ratio: number; units: number }[] {
+  return (state.trades ?? []).flatMap(t => {
+    if (t.market !== market || t.day < fromDay || t.day > toDay) return []
+    if (assetKey(t.gave.asset) === assetKey(a) && assetKey(t.got.asset) === assetKey(b))
+      return [{ day: t.day, ratio: t.got.units / t.gave.units, units: t.gave.units }]
+    if (assetKey(t.got.asset) === assetKey(a) && assetKey(t.gave.asset) === assetKey(b))
+      return [{ day: t.day, ratio: t.gave.units / t.got.units, units: t.got.units }]
+    return []
+  })
+}
+
+export function mediaInUse(state: EconomyState, market: string, fromDay: number, toDay: number): { asset: Asset; trades: number }[] {
+  const counts = new Map<string, { asset: Asset; trades: number }>()
+  for (const t of state.trades ?? []) {
+    if (t.market !== market || t.day < fromDay || t.day > toDay) continue
+    for (const asset of [t.gave.asset, t.got.asset]) {
+      const key = assetKey(asset)
+      const row = counts.get(key) ?? { asset: { ...asset }, trades: 0 }
+      row.trades++; counts.set(key, row)
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.trades - a.trades || (assetKey(a.asset) < assetKey(b.asset) ? -1 : assetKey(a.asset) > assetKey(b.asset) ? 1 : 0))
 }

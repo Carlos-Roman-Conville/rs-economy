@@ -195,3 +195,26 @@ unfixed hosts: none
 | Q9 | money compatibility | legacy state, event and row bytes; optional currency fields absent |
 | Q10 | quote updates | only basePrice allowed; valid prices and opaque ids; money base untouched |
 | Q11 | provider seam and self trade | no self goods leg; missing exchange throws the contract error |
+
+## M — market offers and observed ratios (design v2 §5.2)
+
+`test/offers.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| M1 | crossing barter | one atomic exchange; exact conserving deltas |
+| M2 | resting price | generous incoming offer pays resting ratio |
+| M3 | price-time priority | best price then earliest id |
+| M4 | partial fills | remainders rest and later fill |
+| M5 | currency fills | goods and currency swaps conserve with currency/batch rows; debt allowed |
+| M6 | acceptance | partial and capped full fills |
+| M7 | withdrawal | owner only |
+| M8 | expiry | inclusive expiry day; no-offer refusal; tick removes |
+| M9 | stale stock | failed fill moves nothing and matching continues |
+| M10 | observed views | both directions and windows; sorted media counts; pure |
+| M11 | fence | no rule calls observed ratios |
+| M12 | compatibility | three ports has no offers/trades keys |
+| M13 | replay | state/events/ledger identical |
+| M14 | outcomes | incoming shortfall has no effects; fill stimuli |
+| M15 | explicit exchange | only qualifying market exchanges observed |
+| M16 | validation | invalid assets, numbers and ownership throw without effects |

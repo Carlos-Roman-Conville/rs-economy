@@ -61,6 +61,7 @@ export interface MarketGood {
 export type MarketMode = 'settlement' | 'abstract'
 
 export interface Market {
+  offers?: Offer[]
   id: string                   // the settlement id the host gives, or an abstract port's id
   mode: MarketMode
   inventory: string            // the market's own stock (what is for sale), an Inventory id
@@ -89,7 +90,19 @@ export interface Organisation {
 
 export interface Currency { id: string; issuer: string | null; backing: string | null }
 
+export type Asset = { good: string } | { currency: string }
+export interface AssetUnits { asset: Asset; units: number }
+export interface Offer {
+  id: string; by: string; inventory: string; give: AssetUnits; want: AssetUnits
+  remaining: number; day: number; expires: number | null
+}
+export interface Trade {
+  day: number; market: string; offer: string; maker: string; taker: string
+  gave: AssetUnits; got: AssetUnits
+}
+
 export interface EconomyState {
+  trades?: Trade[]
   currencies?: Record<string, Currency>
   version: 1
   day: number
