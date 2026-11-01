@@ -31,6 +31,18 @@ not a game rule.
 | M8 | known inventory and good required | either unknown reference refuses both commands with state and log untouched |
 | M9 | food mapping validation | a present food must be a non-empty string or null; invalid values leave state and log untouched |
 
+## F — food into a body (CHAINS CG-19, CG-23; with Life)
+
+`test/food-to-body.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| F1 | inventory mass is the meal mass | inventory loses exactly takenKg; that exact quantity and foodOf mapping reach Life's eatMeal inside a kernel transaction |
+| F2 | Life owns food energy | intake rises by table kcal times Life's absorbed fraction; nonzero food-to-waste and food-to-body trace energy balance gross energy within 1e-9 J using KCAL_J |
+| F3 | only eatMeal delivers water and nutrients | takeMass leaves the body unchanged; eatMeal supplies table-derived water and absorbed vitamin C, with Life's nutrient trace and no other body writes |
+| F4 | meals are capped by available stock | an oversized request eats takenKg, the whole stock mass; intake reflects available mass, never requested mass |
+| F5 | failed meals restore both engines | after a committed meal, a transaction containing a successful meal then an unknown-body failure restores stock, full economy state/log/events, and Life's comparison snapshot |
+
 ## Package tests (`test/markets.test.ts`), steps 3–4
 
 | Id | Rule under test | Must hold |
