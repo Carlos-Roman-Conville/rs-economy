@@ -178,6 +178,20 @@
       "kind": "quantity",
       "unit": "kg",
       "direction": "out"
+    },
+    {
+      "mechanism": "economy.money.currencies",
+      "quantity": "economy.currency",
+      "kind": "record",
+      "unit": null,
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.exchange.observed_ratios",
+      "quantity": "economy.observed_ratio",
+      "kind": "record",
+      "unit": null,
+      "direction": "out"
     }
   ]
 }
