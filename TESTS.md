@@ -148,3 +148,14 @@ acceptance. Planned: consumption from a realism population provider (PLAN step 1
 | B4 | self-trade | no goods argument; legacy stockChanged and trade events retained |
 | B5 | fractional units | exactly 2.5 units and their price move both ways |
 | B6 | replay and debt | buys, sells, freight and arrival replay state, events and ledger byte for byte; zero-balance buyer can end negative (Q19, ECON-26 open) |
+
+## C — LedgerProvider hosts (goods leg audit)
+
+Searched `E:/AI Programs/Toolchain` (no package depends on `@rex/economy`; `Reality-simulator/packages/economy` is the package itself) and `Games/RPG's/pirate-ship/web/src` (skipping node_modules), for implementations of `LedgerProvider` and objects passed as `providers.ledger`.
+
+| Host | File:line | Forwards `goods`? |
+|---|---|---|
+| pirate-ship `settlementLedger` | `Games/RPG's/pirate-ship/web/src/economy/providers.ts:57` | yes: the 7th parameter goes to `settlement.run` as `opts.goods` (`ledger`) with `from`, `to`, `good`, `units` in the pay command (lines 58-61); no goods leg falls through to the plain pay |
+| economy `StubLedger` (in-package reference) | `src/providers.ts:70` | yes: builds a money ledger and one kernel transfer with both legs |
+
+unfixed hosts: none
