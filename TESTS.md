@@ -121,4 +121,4 @@ acceptance. Planned: consumption from a realism population provider (PLAN step 1
 | O7 | outcome scope | uncaused trades keep event shapes; caused addMass has no outcome; zero requested mass from stocked inventory stays a no-op |
 | O8 | replay (E3) | accepted buy, refused buy and empty takeMass replay to byte-identical state and events |
 | O9 | bad input | invalid numbers, references, weights and empty causes throw; Runner state, events and log unchanged |
-| open | ledger refusal | insufficient money still throws from the money owner's provider; its outcome is undecided; Economy does not catch or reinterpret it |
+| open | buying beyond the money held | CONTRACTS §3 lets balances go negative (debt), so a caused buy with too little money completes with a `completed` outcome and the buyer in debt; whether a mind may buy beyond its money (refused `insufficient-funds` with the shortfall) is a rule open for Rex (economy ISSUES ECON-26); Economy does not catch or reinterpret provider throws |
