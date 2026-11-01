@@ -1,6 +1,9 @@
 // Events the reducer returns. The host folds them; the engine never pushes.
 
-export type EconomyEvent =
+export type Refused = { type: 'refused'; command: 'buy' | 'sell'; reason: 'price-above-limit' | 'price-below-limit'; price: number; limit: number; cause?: string }
+
+export type EconomyEvent = { cause?: string } & (
+  | Refused
   | { type: 'goodDefined'; good: string }
   | { type: 'recipeDefined'; recipe: string }
   | { type: 'inventoryOpened'; inventory: string; holder: string; market: string }
@@ -18,3 +21,4 @@ export type EconomyEvent =
   | { type: 'shipped'; shipment: string; from: string; to: string; good: string; units: number; arrives: number; freightTxn: string | null }
   | { type: 'arrived'; shipment: string; to: string; good: string; units: number }
   | { type: 'dayEnded'; day: number }
+)

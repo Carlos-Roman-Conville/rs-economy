@@ -7,10 +7,14 @@ import { price as priceOf } from './queries.ts'
 import type { Good, MarketMode, Recipe } from './state.ts'
 import { tick } from './tick/index.ts'
 
-export type TakeMass = { type: 'takeMass'; inventory: string; good: string; kg: number }
-export type AddMass = { type: 'addMass'; inventory: string; good: string; kg: number }
+export type CommandCause = { cause?: string }
+export type Buy = CommandCause & { type: 'buy'; inventory: string; good: string; units: number; price?: number; priceMax?: number }
+export type Sell = CommandCause & { type: 'sell'; inventory: string; good: string; units: number; price?: number; priceMin?: number }
 
-export type Command =
+export type TakeMass = CommandCause & { type: 'takeMass'; inventory: string; good: string; kg: number }
+export type AddMass = CommandCause & { type: 'addMass'; inventory: string; good: string; kg: number }
+
+export type Command = CommandCause & (
   | TakeMass
   | AddMass
   | { type: 'defineGood'; good: Good }
@@ -24,10 +28,11 @@ export type Command =
   | { type: 'produce'; inventory: string; recipe: string; units: number }     // Settlement's MaterialProvider.produce
   | { type: 'take'; inventory: string; good: string; units: number }         // Settlement's MaterialProvider.take
   | { type: 'openOrganisation'; name: string; kind?: string | null }
-  | { type: 'sell'; inventory: string; good: string; units: number; price?: number }   // inventory -> its market's stock; money market -> holder
-  | { type: 'buy'; inventory: string; good: string; units: number; price?: number }    // market's stock -> inventory; money holder -> market
+  | Sell   // inventory -> its market's stock; money market -> holder
+  | Buy    // market's stock -> inventory; money holder -> market
   | { type: 'ship'; from: string; to: string; good: string; units: number; freight?: { payer: string; payee: string; amount: number } }
   | { type: 'tick' }
+)
 
 export function apply(ctx: Ctx, command: Command): void {
   switch (command.type) {
@@ -44,8 +49,8 @@ export function apply(ctx: Ctx, command: Command): void {
     case 'takeMass': return transferMass(ctx, command)
     case 'addMass': return transferMass(ctx, command)
     case 'openOrganisation': return openOrganisation(ctx, command.name, command.kind ?? null)
-    case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price)
-    case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price)
+    case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price, command.priceMin)
+    case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price, command.priceMax)
     case 'ship': return ship(ctx, command.from, command.to, command.good, command.units, command.freight ?? null)
     case 'tick': return tick(ctx)
     default: throw new Error(`unknown command: ${(command as { type: string }).type}`)
@@ -198,7 +203,7 @@ function openOrganisation(ctx: Ctx, name: string, kind: string | null): void {
 /** A sale or purchase between an inventory and its market's own stock, at the market's price today unless the host
  *  names one (CONTRACTS.md §7). Money moves through the ledger provider only (§3); the two holders are the inventory's
  *  holder and the market id. With no price on the market and none given, the trade is refused: a price is open, never invented. */
-function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, units: number, given: number | undefined): void {
+function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, units: number, given: number | undefined, limit: number | undefined): void {
   const inv = inventory(ctx, invId); good(ctx, goodId); finite(units, 'units', 0)
   if (units === 0) throw new Error('units must be > 0')
   const mkt = market(ctx, inv.market)
@@ -206,16 +211,21 @@ function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, un
   const unit = given ?? priceOf(ctx.state, ctx.config, mkt.id, goodId)
   if (unit === null) throw new Error(`no price for ${goodId} in ${mkt.id}: set a basePrice or give one (open)`)
   finite(unit, 'price', 0)
+  if (limit !== undefined) finite(limit, side === 'buy' ? 'priceMax' : 'priceMin', 0)
+  if (side === 'sell' && units > stockOf(inv, goodId)) throw new Error(`cannot sell ${units} ${goodId} from ${invId}: have ${stockOf(inv, goodId)}`)
+  if (side === 'buy' && units > stockOf(stall, goodId)) throw new Error(`cannot buy ${units} ${goodId} in ${mkt.id}: the market has ${stockOf(stall, goodId)}`)
+  if (limit !== undefined && (side === 'buy' ? unit > limit : unit < limit)) {
+    ctx.events.push({ type: 'refused', command: side, reason: side === 'buy' ? 'price-above-limit' : 'price-below-limit', price: unit, limit })
+    return
+  }
   const amount = unit * units
   const note = `${units} @ ${unit}`
   if (side === 'sell') {
-    if (units > stockOf(inv, goodId)) throw new Error(`cannot sell ${units} ${goodId} from ${invId}: have ${stockOf(inv, goodId)}`)
     const txn = ctx.providers.ledger.transfer(mkt.id, inv.holder, amount, 'sale', goodId, note)
     adjust(ctx, inv, goodId, -units, 'sell')
     adjust(ctx, stall, goodId, units, 'sell')
     ctx.events.push({ type: 'sold', inventory: invId, market: mkt.id, good: goodId, units, price: unit, amount, txn })
   } else {
-    if (units > stockOf(stall, goodId)) throw new Error(`cannot buy ${units} ${goodId} in ${mkt.id}: the market has ${stockOf(stall, goodId)}`)
     const txn = ctx.providers.ledger.transfer(inv.holder, mkt.id, amount, 'purchase', goodId, note)
     adjust(ctx, stall, goodId, -units, 'buy')
     adjust(ctx, inv, goodId, units, 'buy')

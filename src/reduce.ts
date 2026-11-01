@@ -4,7 +4,7 @@
 import { Runner as KernelRunner } from '@rex/kernel'
 import { apply, type Command } from './commands.ts'
 import { assertPriceRule, defaultConfig, type EconomyConfig } from './config.ts'
-import type { Ctx } from './context.ts'
+import { nonempty, type Ctx } from './context.ts'
 import type { EconomyEvent } from './events.ts'
 import { stubProviders, type Providers } from './providers.ts'
 import { initialState, type EconomyState } from './state.ts'
@@ -13,7 +13,11 @@ export interface ReduceResult { state: EconomyState; events: EconomyEvent[]; min
 
 export function reduce(state: EconomyState, command: Command, config: EconomyConfig = defaultConfig(), providers: Providers = stubProviders()): ReduceResult {
   const ctx: Ctx = { state: structuredClone(state), config, providers, events: [], minted: null, taken: null }
+  if (command.cause !== undefined) nonempty(command.cause, 'cause')
   apply(ctx, command)
+  if (command.cause !== undefined) {
+    for (const event of ctx.events) event.cause = command.cause
+  }
   const result: ReduceResult = { state: ctx.state, events: ctx.events, minted: ctx.minted, taken: ctx.taken }
   if (command.type === 'takeMass') result.takenKg = ctx.takenKg
   return result

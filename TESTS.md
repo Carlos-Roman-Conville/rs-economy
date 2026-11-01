@@ -91,3 +91,17 @@ acceptance. Planned: consumption from a realism population provider (PLAN step 1
 | V3 | price bounds | every PriceRule at shortages 0, 0.25, 0.5, 0.75 and 1 gives finite queried and tick-written prices within its own bounds times base; base rule equals base exactly |
 | V5 | King-Davenant table | independently transcribed ECON-DAV rows and zero reproduced to 1e-12; linear interpolation and base scaling; non-decreasing on a 0.01 grid over [0, 1], capped from 0.5; cap 5 and NaN refused at Runner construction and by direct price queries, before the first tick or state changes; cap 5.5 accepted; direct assertPriceRule checks refuse cap 5 and NaN and accept 5.5; default remains base |
 | V4 | supply shock stability | for every PriceRule kind, halve north's grain production on zero-based days [60, 90), then restore it; over 365 days every daily price stays finite and within rule bounds, every balance stays finite and total money equals the sum of starting balances set by replay funding to relative 1e-9 |
+
+## I — intentions (CHAINS IF-26)
+
+`test/intention.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| I1 | accepted buy | limits at or above price accept; three units and their price move oppositely, conserving goods and money; every event carries cause |
+| I2 | limit refusal | buy above maximum and sell below minimum emit exactly one caused refusal; state, balances and ledger log unchanged; no transfer call |
+| I3 | accepted sell | limits at or below price accept; goods and money conserved; every event carries cause |
+| I4 | generic optional cause | non-trade events carry cause too; no cause preserves exact event keys; empty cause throws before effects |
+| I5 | refused replay (E3) | refusal is logged; replay produces byte-identical state and events |
+| I6 | invalid input still throws | NaN, negative and infinite limits throw; bad units, excess stock and no price remain errors even with limits |
+| I7 | explicit trade price | limits compare given price before market price; zero price and zero limit are valid |
