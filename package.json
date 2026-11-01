@@ -11,7 +11,7 @@
     "ports": "node --input-type=module -e \"process.argv=[process.argv[0],'examples/three-ports.ts',...process.argv.slice(2)];const {runnerImport}=await import('vite');await runnerImport('./examples/three-ports.ts',{root:process.cwd()});\""
   },
   "dependencies": {
-    "@rex/kernel": "git+file:///E:/backups/reality-sim/git/kernel.git#v0.1.0"
+    "@rex/kernel": "git+file:///E:/backups/reality-sim/git/kernel.git#v0.1.1"
   },
   "devDependencies": {
     "@rex/realism": "file:../realism",
