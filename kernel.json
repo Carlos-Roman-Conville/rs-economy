@@ -164,6 +164,20 @@
       "kind": "record",
       "unit": null,
       "direction": "out"
+    },
+    {
+      "mechanism": "economy.recipe.definition",
+      "quantity": "economy.good_mass_per_unit",
+      "kind": "quantity",
+      "unit": "kg/count",
+      "direction": "out"
+    },
+    {
+      "mechanism": "economy.inventory.holdings",
+      "quantity": "economy.mass_taken",
+      "kind": "quantity",
+      "unit": "kg",
+      "direction": "out"
     }
   ]
 }
