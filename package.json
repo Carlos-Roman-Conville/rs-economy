@@ -8,7 +8,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "ports": "node --input-type=module -e \"process.argv=[process.argv[0],'examples/three-ports.ts',...process.argv.slice(2)];const {runnerImport}=await import('vite');await runnerImport('./examples/three-ports.ts',{root:process.cwd()});\""
+    "ports": "node --experimental-strip-types examples/three-ports.ts"
   },
   "dependencies": {
     "@rex/kernel": "git+file:///E:/backups/reality-sim/git/kernel.git#v0.1.1"
