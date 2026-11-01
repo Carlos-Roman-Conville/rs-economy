@@ -2,10 +2,12 @@
 // Each step is a function here; the order is config. Nothing in a step is a game rule: every rate is host data
 // on a good or a market good, and every formula is a config key.
 
+import { simTime, transfer, TransferJournal } from '@rex/kernel'
+import { goodsLedger } from '../goods-ledger.ts'
 import { adjust, marketGood, must, type Ctx } from '../context.ts'
 import { price as priceOf } from '../queries.ts'
 
-type Step = (ctx: Ctx) => void
+type Step = (ctx: Ctx, journal: TransferJournal) => void
 
 /** An abstract market adds its planned `productionPerDay` to its own stock (CONTRACTS.md §6); a settlement-run market
  *  produced through `produce` already. Then today's totals roll into `producedLast`. */
@@ -24,11 +26,21 @@ export function production(ctx: Ctx): void {
 }
 
 /** Shipments whose day has come land in their destination inventory (E10). */
-export function shipments(ctx: Ctx): void {
+export function shipments(ctx: Ctx, journal = new TransferJournal('economy.goods')): void {
   for (const shipment of Object.values(ctx.state.shipments)) {
     if (shipment.status !== 'transit' || shipment.arrives > ctx.state.day) continue
     const to = must(ctx.state.inventories, shipment.to, 'inventory')
-    adjust(ctx, to, shipment.good, shipment.units, `arrive:${shipment.id}`)
+    const ledger = goodsLedger(ctx, `arrive:${shipment.id}`)
+    if (shipment.units > 0) {
+      transfer(journal, {
+        t: simTime(ctx.state.day * 86_400_000), process: 'economy.trade.shipment', quantity: shipment.good,
+        unit: 'count', amount: shipment.units,
+        from: { ledger, account: `shipment:${shipment.id}` }, to: { ledger, account: to.id },
+      })
+    } else {
+      // Fully spoiled cargo has no physical flow; preserve the existing zero-delta event.
+      adjust(ctx, to, shipment.good, 0, `arrive:${shipment.id}`)
+    }
     shipment.status = 'arrived'
     ctx.events.push({ type: 'arrived', shipment: shipment.id, to: shipment.to, good: shipment.good, units: shipment.units })
   }
@@ -103,11 +115,12 @@ export function advance(ctx: Ctx): void {
 export const STEPS: Record<string, Step> = { production, shipments, spoilage, consumption, prices, advance }
 
 export function tick(ctx: Ctx): void {
+  const journal = new TransferJournal('economy.goods')
   ctx.state.tickTrace = []
   for (const name of ctx.config.tickOrder) {
     const step = STEPS[name]
     if (!step) throw new Error(`unknown tick step: ${name}`)
-    step(ctx)
+    step(ctx, journal)
     ctx.state.tickTrace.push(name)
   }
 }

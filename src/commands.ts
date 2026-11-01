@@ -1,6 +1,8 @@
 // The command union and handlers (step 2): the catalogue, inventories, markets, stock moves, production, the tick.
 // Every handler checks only this engine's invariants and throws without touching the caller's state.
 
+import { simTime, transfer, TransferJournal } from '@rex/kernel'
+import { goodsLedger } from './goods-ledger.ts'
 import { adjust, finite, good, integer, inventory, market, marketGood, must, newId, nonempty, recipe, stockOf, type Ctx } from './context.ts'
 import { availableUnits, consumeInputs } from './material.ts'
 import { price as priceOf } from './queries.ts'
@@ -235,17 +237,29 @@ function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, un
     ctx.events.push({ type: 'refused', command: side, reason: side === 'buy' ? 'price-above-limit' : 'price-below-limit', price: unit, limit })
     return
   }
+  const journal = new TransferJournal('economy.goods')
+  const ledger = goodsLedger(ctx, side)
+  const move = (from: string, to: string) => {
+    if (from === to) {
+      // Trading with the stall itself has no flow between holders; retain its existing events.
+      adjust(ctx, inv, goodId, -units, side)
+      adjust(ctx, inv, goodId, units, side)
+      return
+    }
+    transfer(journal, {
+      t: simTime(ctx.state.day * 86_400_000), process: 'economy.trade.trade', quantity: goodId, unit: 'count', amount: units,
+      from: { ledger, account: from }, to: { ledger, account: to },
+    })
+  }
   const amount = unit * units
   const note = `${units} @ ${unit}`
   if (side === 'sell') {
     const txn = ctx.providers.ledger.transfer(mkt.id, inv.holder, amount, 'sale', goodId, note)
-    adjust(ctx, inv, goodId, -units, 'sell')
-    adjust(ctx, stall, goodId, units, 'sell')
+    move(inv.id, stall.id)
     ctx.events.push({ type: 'sold', inventory: invId, market: mkt.id, good: goodId, units, price: unit, amount, txn })
   } else {
     const txn = ctx.providers.ledger.transfer(inv.holder, mkt.id, amount, 'purchase', goodId, note)
-    adjust(ctx, stall, goodId, -units, 'buy')
-    adjust(ctx, inv, goodId, units, 'buy')
+    move(stall.id, inv.id)
     ctx.events.push({ type: 'bought', inventory: invId, market: mkt.id, good: goodId, units, price: unit, amount, txn })
   }
 }
@@ -265,9 +279,14 @@ function ship(ctx: Ctx, fromId: string, toId: string, goodId: string, units: num
     freightTxn = ctx.providers.ledger.transfer(freight.payer, freight.payee, freight.amount, 'freight', goodId, `${units} ${fromId}>${toId}`)
   }
   const id = newId(ctx, 'ship')
-  adjust(ctx, from, goodId, -units, `ship:${id}`)
   const arrives = ctx.state.day + days
   ctx.state.shipments[id] = { id, from: fromId, to: toId, good: goodId, units, departed: ctx.state.day, arrives, status: 'transit' }
+  const journal = new TransferJournal('economy.goods')
+  const ledger = goodsLedger(ctx, `ship:${id}`)
+  transfer(journal, {
+    t: simTime(ctx.state.day * 86_400_000), process: 'economy.trade.shipment', quantity: goodId, unit: 'count', amount: units,
+    from: { ledger, account: fromId }, to: { ledger, account: `shipment:${id}` },
+  })
   ctx.minted = id
   ctx.events.push({ type: 'shipped', shipment: id, from: fromId, to: toId, good: goodId, units, arrives, freightTxn })
 }

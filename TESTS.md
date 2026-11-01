@@ -122,3 +122,16 @@ acceptance. Planned: consumption from a realism population provider (PLAN step 1
 | O8 | replay (E3) | accepted buy, refused buy and empty takeMass replay to byte-identical state and events |
 | O9 | bad input | invalid numbers, references, weights and empty causes throw; Runner state, events and log unchanged |
 | open | buying beyond the money held | CONTRACTS ยง3 lets balances go negative (debt), so a caused buy with too little money completes with a `completed` outcome and the buyer in debt; whether a mind may buy beyond its money (refused `insufficient-funds` with the shortfall) is a rule open for Rex (economy ISSUES ECON-26); Economy does not catch or reinterpret provider throws |
+
+## T — goods transfers on kernel transfer() (PLATFORM ง7a)
+
+`test/goods-ledger.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| T1 | buy conservation | stall loses q, buyer gains q; stockChanged event bytes and order unchanged; self-trades retain legacy events |
+| T2 | sell conservation | seller loses q, stall gains q; stockChanged event bytes and order unchanged |
+| T3 | dispatch and arrival conservation | inventory plus transit stays constant each day; original reasons retained; fully spoiled cargo preserves its zero-delta arrival |
+| T4 | goods ledger contract | count units; unknown accounts/goods refused; shipment credits/debits match its units and emit nothing |
+| T5 | atomic overdraw refusal | owner throws; earlier batch changes to inventories, events and journal roll back |
+| T6 | deterministic replay (E3) | trades and shipment replay to byte-identical state and events |
