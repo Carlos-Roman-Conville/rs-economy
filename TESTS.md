@@ -135,3 +135,16 @@ acceptance. Planned: consumption from a realism population provider (PLAN step 1
 | T4 | goods ledger contract | count units; unknown accounts/goods refused; shipment credits/debits match its units and emit nothing |
 | T5 | atomic overdraw refusal | owner throws; earlier batch changes to inventories, events and journal roll back |
 | T6 | deterministic replay (E3) | trades and shipment replay to byte-identical state and events |
+
+## B — money and goods in one transfer (CONTRACTS §20)
+
+`test/trade-batch.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| B1 | buy batch | one provider call; money and goods conserved; purchase row and event bytes unchanged |
+| B2 | sell batch | one provider call; money and goods conserved; sale row and event bytes unchanged |
+| B3 | atomic refusal | goods overdraw restores money, inventories, existing rows and events |
+| B4 | self-trade | no goods argument; legacy stockChanged and trade events retained |
+| B5 | fractional units | exactly 2.5 units and their price move both ways |
+| B6 | replay and debt | buys, sells, freight and arrival replay state, events and ledger byte for byte; zero-balance buyer can end negative (Q19, ECON-26 open) |

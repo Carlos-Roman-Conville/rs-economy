@@ -1,3 +1,4 @@
+// Buy/sell's goods leg travels in the money call (CONTRACTS §20); shipments keep their own transfer.
 // Production inputs/outputs, spoilage, market consumption, take, takeMass, addMass and addStock
 // are not transfers between two holders and keep adjust; mass conversion stays with the mass commands.
 import type { TransferLedger } from '@rex/kernel'

@@ -237,29 +237,27 @@ function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, un
     ctx.events.push({ type: 'refused', command: side, reason: side === 'buy' ? 'price-above-limit' : 'price-below-limit', price: unit, limit })
     return
   }
-  const journal = new TransferJournal('economy.goods')
-  const ledger = goodsLedger(ctx, side)
-  const move = (from: string, to: string) => {
-    if (from === to) {
-      // Trading with the stall itself has no flow between holders; retain its existing events.
-      adjust(ctx, inv, goodId, -units, side)
-      adjust(ctx, inv, goodId, units, side)
-      return
-    }
-    transfer(journal, {
-      t: simTime(ctx.state.day * 86_400_000), process: 'economy.trade.trade', quantity: goodId, unit: 'count', amount: units,
-      from: { ledger, account: from }, to: { ledger, account: to },
-    })
+  const selfTrade = inv.id === stall.id
+  const moveSelf = () => {
+    // Trading with the stall itself has no flow between holders; retain its existing events.
+    adjust(ctx, inv, goodId, -units, side)
+    adjust(ctx, inv, goodId, units, side)
   }
   const amount = unit * units
   const note = `${units} @ ${unit}`
   if (side === 'sell') {
-    const txn = ctx.providers.ledger.transfer(mkt.id, inv.holder, amount, 'sale', goodId, note)
-    move(inv.id, stall.id)
+    const txn = selfTrade
+      ? ctx.providers.ledger.transfer(mkt.id, inv.holder, amount, 'sale', goodId, note)
+      : ctx.providers.ledger.transfer(mkt.id, inv.holder, amount, 'sale', goodId, note,
+        { ledger: goodsLedger(ctx, 'sell'), from: inv.id, to: stall.id, good: goodId, units })
+    if (selfTrade) moveSelf()
     ctx.events.push({ type: 'sold', inventory: invId, market: mkt.id, good: goodId, units, price: unit, amount, txn })
   } else {
-    const txn = ctx.providers.ledger.transfer(inv.holder, mkt.id, amount, 'purchase', goodId, note)
-    move(stall.id, inv.id)
+    const txn = selfTrade
+      ? ctx.providers.ledger.transfer(inv.holder, mkt.id, amount, 'purchase', goodId, note)
+      : ctx.providers.ledger.transfer(inv.holder, mkt.id, amount, 'purchase', goodId, note,
+        { ledger: goodsLedger(ctx, 'buy'), from: stall.id, to: inv.id, good: goodId, units })
+    if (selfTrade) moveSelf()
     ctx.events.push({ type: 'bought', inventory: invId, market: mkt.id, good: goodId, units, price: unit, amount, txn })
   }
 }

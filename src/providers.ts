@@ -1,6 +1,8 @@
 // What this engine asks of the host (CONTRACTS.md §3, §4b, §4c, §5). The engine imports no other engine; the host
 // implements these from @rex/settlement, @rex/realism, its map and its population model, or the stubs below.
 
+import { simTime, transfer, TransferJournal, type TransferLedger, type TransferRequest } from '@rex/kernel'
+
 export interface LedgerRow {
   id: string; day: number; kind: string; from: string | null; to: string | null
   subject: string | null; amount: number; authority: string | null; note: string
@@ -9,7 +11,11 @@ export interface LedgerRow {
 /** Money has one home (§3): Settlement's accounts in the pirate game. Economy keeps no balances. */
 export interface LedgerProvider {
   balance(holder: string): number
-  transfer(from: string, to: string, amount: number, kind: string, subject: string | null, note?: string): string
+  transfer(from: string, to: string, amount: number, kind: string, subject: string | null, note?: string,
+    /** The goods leg of a paid exchange. `ledger` is the economy's goods TransferLedger, built by the economy inside
+     *  the command that calls `transfer`; `from` and `to` are its accounts (inventory ids), `good` its quantity (a good
+     *  id), `units` the amount (a finite number >= 0; fractions allowed). */
+    goods?: { ledger: TransferLedger; from: string; to: string; good: string; units: number }): string
   rows(holder: string, fromDay: number, toDay: number): LedgerRow[]
 }
 
@@ -61,10 +67,33 @@ export class StubLedger implements LedgerProvider {
   log: LedgerRow[] = []
   day = 0
   balance(holder: string): number { return this.balances[holder] ?? 0 }
-  transfer(from: string, to: string, amount: number, kind: string, subject: string | null, note = ''): string {
+  transfer(from: string, to: string, amount: number, kind: string, subject: string | null, note = '',
+    goods?: { ledger: TransferLedger; from: string; to: string; good: string; units: number }): string {
     if (!Number.isFinite(amount) || amount < 0) throw new Error(`amount must be a number >= 0`)
-    this.balances[from] = this.balance(from) - amount
-    this.balances[to] = this.balance(to) + amount
+    if (goods === undefined) {
+      this.balances[from] = this.balance(from) - amount
+      this.balances[to] = this.balance(to) + amount
+    } else {
+      const money: TransferLedger = {
+        id: 'stub.money',
+        unit: () => 'money',
+        apply: (account, _quantity, delta) => { this.balances[account] = this.balance(account) + delta },
+        snapshot: () => structuredClone(this.balances),
+        restore: snapshot => { this.balances = structuredClone(snapshot as Record<string, number>) },
+      }
+      const t = simTime(this.day * 86_400_000)
+      const requests: TransferRequest[] = []
+      if (amount > 0 && from !== to) requests.push({
+        t, process: 'economy.trade.trade', quantity: 'money', unit: 'money', amount,
+        from: { ledger: money, account: from }, to: { ledger: money, account: to },
+      })
+      if (goods.units > 0) requests.push({
+        t, process: 'economy.trade.trade', quantity: goods.good,
+        unit: goods.ledger.unit(goods.from, goods.good), amount: goods.units,
+        from: { ledger: goods.ledger, account: goods.from }, to: { ledger: goods.ledger, account: goods.to },
+      })
+      transfer(new TransferJournal('economy.stub-ledger'), ...requests)
+    }
     const id = `txn.${String(this.log.length + 1).padStart(4, '0')}`
     this.log.push({ id, day: this.day, kind, from, to, subject, amount, authority: null, note })
     return id
