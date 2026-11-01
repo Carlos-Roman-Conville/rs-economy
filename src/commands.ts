@@ -11,8 +11,8 @@ import type { Asset, AssetUnits, Offer, Good, MarketMode, Recipe } from './state
 import { tick } from './tick/index.ts'
 
 export type CommandCause = { cause?: string }
-export type Buy = CommandCause & { type: 'buy'; currency?: string; inventory: string; good: string; units: number; price?: number; priceMax?: number }
-export type Sell = CommandCause & { type: 'sell'; currency?: string; inventory: string; good: string; units: number; price?: number; priceMin?: number }
+export type Buy = CommandCause & { type: 'buy'; currency?: string; purpose?: 'tax' | 'debt'; inventory: string; good: string; units: number; price?: number; priceMax?: number }
+export type Sell = CommandCause & { type: 'sell'; currency?: string; purpose?: 'tax' | 'debt'; inventory: string; good: string; units: number; price?: number; priceMin?: number }
 
 export type TakeMass = CommandCause & { type: 'takeMass'; inventory: string; good: string; kg: number }
 export type AddMass = CommandCause & { type: 'addMass'; inventory: string; good: string; kg: number }
@@ -62,8 +62,8 @@ export function apply(ctx: Ctx, command: Command): void {
     case 'takeMass': return transferMass(ctx, command)
     case 'addMass': return transferMass(ctx, command)
     case 'openOrganisation': return openOrganisation(ctx, command.name, command.kind ?? null)
-    case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price, command.priceMin, command.cause, command.currency)
-    case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price, command.priceMax, command.cause, command.currency)
+    case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price, command.priceMin, command.cause, command.currency, command.purpose)
+    case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price, command.priceMax, command.cause, command.currency, command.purpose)
     case 'ship': return ship(ctx, command.from, command.to, command.good, command.units, command.freight ?? null)
     case 'tick': return tick(ctx)
     default: throw new Error(`unknown command: ${(command as { type: string }).type}`)
@@ -236,7 +236,8 @@ function openOrganisation(ctx: Ctx, name: string, kind: string | null): void {
 /** A sale or purchase between an inventory and its market's own stock, at the market's price today unless the host
  *  names one (CONTRACTS.md §7). Money moves through the ledger provider only (§3); the two holders are the inventory's
  *  holder and the market id. With no price on the market and none given, the trade is refused: a price is open, never invented. */
-function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, units: number, given: number | undefined, limit: number | undefined, cause: string | undefined, currency = 'money'): void {
+function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, units: number, given: number | undefined, limit: number | undefined, cause: string | undefined, currency = 'money', purpose?: 'tax' | 'debt'): void {
+  if (purpose !== undefined && purpose !== 'tax' && purpose !== 'debt') throw new Error('purpose must be tax or debt')
   const inv = inventory(ctx, invId); good(ctx, goodId); finite(units, 'units', 0)
   if (units === 0) throw new Error('units must be > 0')
   const mkt = market(ctx, inv.market)
@@ -245,7 +246,7 @@ function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, un
   if (currency !== 'money' && priceOf(ctx.state, ctx.config, mkt.id, goodId, currency) === null) {
     if (cause === undefined) throw new Error(`not accepted: ${currency} for ${goodId} in ${mkt.id}`)
     ctx.events.push({ type: 'refused', command: side, reason: 'not-accepted', price: null,
-      currency, market: mkt.id, refusedBy: stall.holder })
+      currency, market: mkt.id, refusedBy: stall.holder, ...(purpose === undefined ? {} : { purpose }) })
     return
   }
   const unit = given ?? priceOf(ctx.state, ctx.config, mkt.id, goodId, currency)

@@ -195,6 +195,7 @@ unfixed hosts: none
 | Q9 | money compatibility | legacy state, event and row bytes; optional currency fields absent |
 | Q10 | quote updates | only basePrice allowed; valid prices and opaque ids; money base untouched |
 | Q11 | provider seam and self trade | no self goods leg; missing exchange throws the contract error |
+| Q12 | payment purpose (GOV-19) | tax/debt appear only on not-accepted refusals and their failed stimuli; one refusal, no movement; absent purpose preserves bytes; invalid purpose throws; accepted trades and other refusals unchanged |
 
 ## M — market offers and observed ratios (design v2 §5.2)
 

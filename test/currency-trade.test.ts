@@ -72,6 +72,61 @@ describe('Q4 unaccepted currency produces one failed outcome without movement', 
   })
 })
 
+describe('Q12 payment purpose describes only not-accepted refusals', () => {
+  it.each([['buy', 'tax'], ['sell', 'debt']] as const)('%s carries %s into the single refusal and failed outcome', (type, purpose) => {
+    const { runner, p, inv } = setup()
+    runner.run({ type: 'setMarketGood', market: 'port', good: 'grain', currency: 'pieces', basePrice: null })
+    const before = JSON.stringify([runner.state, p.ledger])
+    const exchange = vi.spyOn(p.ledger, 'exchange')
+    const transfer = vi.spyOn(p.ledger, 'transfer')
+    const fields = { command: type, reason: 'not-accepted', price: null, currency: 'pieces', market: 'port', refusedBy: 'port', purpose }
+    const refused = { type: 'refused', ...fields, cause: 'intent' }
+    const result = runner.run({ type, inventory: inv, good: 'grain', units: 1, currency: 'pieces', cause: 'intent', purpose })
+    expect(result.events).toEqual([refused, { type: 'shared.action.outcome', cause: 'intent', status: 'failed', stimuli: [fields], payload: refused }])
+    expect(JSON.stringify([runner.state, p.ledger])).toBe(before)
+    expect(exchange).not.toHaveBeenCalled()
+    expect(transfer).not.toHaveBeenCalled()
+  })
+
+  it('omits purpose entirely and preserves refusal bytes for ordinary sales', () => {
+    const { runner, inv } = setup()
+    runner.run({ type: 'setMarketGood', market: 'port', good: 'grain', currency: 'pieces', basePrice: null })
+    const fields = { command: 'buy', reason: 'not-accepted', price: null, currency: 'pieces', market: 'port', refusedBy: 'port' }
+    const refused = { type: 'refused', ...fields, cause: 'intent' }
+    const result = runner.run({ type: 'buy', inventory: inv, good: 'grain', units: 1, currency: 'pieces', cause: 'intent' })
+    expect(result.events[0]).not.toHaveProperty('purpose')
+    expect(JSON.stringify(result.events)).toBe(JSON.stringify([refused,
+      { type: 'shared.action.outcome', cause: 'intent', status: 'failed', stimuli: [fields], payload: refused }]))
+  })
+
+  it('rejects invalid purposes before effects for both commands', () => {
+    const { runner, p, inv } = setup()
+    const before = JSON.stringify([runner.state, runner.log, runner.events, p.ledger])
+    for (const type of ['buy', 'sell'] as const) {
+      for (const purpose of ['', 'sale', null, 0, false, {}]) {
+        // @ts-expect-error invalid host input must be checked at runtime
+        expect(() => runner.run({ type, inventory: inv, good: 'grain', units: 1, purpose })).toThrow('purpose must be tax or debt')
+      }
+    }
+    expect(JSON.stringify([runner.state, runner.log, runner.events, p.ledger])).toBe(before)
+  })
+
+  it('preserves accepted trades and other refusals byte for byte with either purpose', () => {
+    for (const type of ['buy', 'sell'] as const) for (const currency of ['money', 'pieces']) {
+      for (const purpose of ['tax', 'debt'] as const) for (const refused of [false, true]) {
+        const run = (withPurpose: boolean) => {
+          const { runner, p, inv } = setup()
+          runner.run({ type: 'addStock', inventory: inv, good: 'grain', units: 1 })
+          const result = runner.run({ type, inventory: inv, good: 'grain', units: refused ? 100 : 1,
+            currency, cause: 'intent', ...(withPurpose ? { purpose } : {}) })
+          return JSON.stringify([result, p.ledger])
+        }
+        expect(run(true)).toBe(run(false))
+      }
+    }
+  })
+})
+
 describe('Q5 uncaused unaccepted currency throws', () => {
   it('requires a posted base even when the command gives a price', () => {
     const { runner, inv } = setup(false)
