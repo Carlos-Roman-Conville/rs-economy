@@ -49,8 +49,8 @@ export function apply(ctx: Ctx, command: Command): void {
     case 'takeMass': return transferMass(ctx, command)
     case 'addMass': return transferMass(ctx, command)
     case 'openOrganisation': return openOrganisation(ctx, command.name, command.kind ?? null)
-    case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price, command.priceMin)
-    case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price, command.priceMax)
+    case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price, command.priceMin, command.cause)
+    case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price, command.priceMax, command.cause)
     case 'ship': return ship(ctx, command.from, command.to, command.good, command.units, command.freight ?? null)
     case 'tick': return tick(ctx)
     default: throw new Error(`unknown command: ${(command as { type: string }).type}`)
@@ -180,6 +180,11 @@ function transferMass(ctx: Ctx, command: TakeMass | AddMass): void {
   if (weight === null || weight === 0) throw new Error('mass transfer requires a known positive good.weight')
   if (command.type === 'takeMass') {
     const held = stockOf(inv, command.good)
+    if (command.cause !== undefined && held === 0) {
+      ctx.takenKg = 0
+      ctx.events.push({ type: 'refused', command: 'takeMass', reason: 'no-stock', price: null, units: command.kg, available: 0 })
+      return
+    }
     const takenKg = Math.min(command.kg, held * weight)
     // Use the exact held units when emptying stock to avoid division roundoff.
     const units = takenKg === held * weight ? held : takenKg / weight
@@ -203,15 +208,27 @@ function openOrganisation(ctx: Ctx, name: string, kind: string | null): void {
 /** A sale or purchase between an inventory and its market's own stock, at the market's price today unless the host
  *  names one (CONTRACTS.md §7). Money moves through the ledger provider only (§3); the two holders are the inventory's
  *  holder and the market id. With no price on the market and none given, the trade is refused: a price is open, never invented. */
-function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, units: number, given: number | undefined, limit: number | undefined): void {
+function trade(ctx: Ctx, side: 'sell' | 'buy', invId: string, goodId: string, units: number, given: number | undefined, limit: number | undefined, cause: string | undefined): void {
   const inv = inventory(ctx, invId); good(ctx, goodId); finite(units, 'units', 0)
   if (units === 0) throw new Error('units must be > 0')
   const mkt = market(ctx, inv.market)
   const stall = inventory(ctx, mkt.inventory)
   const unit = given ?? priceOf(ctx.state, ctx.config, mkt.id, goodId)
+  if (cause !== undefined) {
+    if (limit !== undefined) finite(limit, side === 'buy' ? 'priceMax' : 'priceMin', 0)
+    if (unit === null) {
+      ctx.events.push({ type: 'refused', command: side, reason: 'no-price', price: null })
+      return
+    }
+  }
   if (unit === null) throw new Error(`no price for ${goodId} in ${mkt.id}: set a basePrice or give one (open)`)
   finite(unit, 'price', 0)
   if (limit !== undefined) finite(limit, side === 'buy' ? 'priceMax' : 'priceMin', 0)
+  const available = stockOf(side === 'sell' ? inv : stall, goodId)
+  if (cause !== undefined && units > available) {
+    ctx.events.push({ type: 'refused', command: side, reason: 'beyond-stock', price: unit, units, available })
+    return
+  }
   if (side === 'sell' && units > stockOf(inv, goodId)) throw new Error(`cannot sell ${units} ${goodId} from ${invId}: have ${stockOf(inv, goodId)}`)
   if (side === 'buy' && units > stockOf(stall, goodId)) throw new Error(`cannot buy ${units} ${goodId} in ${mkt.id}: the market has ${stockOf(stall, goodId)}`)
   if (limit !== undefined && (side === 'buy' ? unit > limit : unit < limit)) {

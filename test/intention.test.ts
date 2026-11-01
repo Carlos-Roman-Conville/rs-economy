@@ -24,7 +24,7 @@ describe('I1 accepted buy intention conserves goods and money', () => {
     expect(ledger.balances).toEqual({ holder: 94, market: 106 })
     expect(ledger.log).toHaveLength(1)
     expect(ledger.log[0]).toMatchObject({ from: 'holder', to: 'market', amount: 6 })
-    expect(result.events).toHaveLength(3)
+    expect(result.events).toHaveLength(4)
     expect(result.events.every(event => event.cause === 'int.1')).toBe(true)
   })
 })
@@ -37,7 +37,7 @@ describe('I2 limit misses leave state and providers untouched', () => {
     const command: Command = type === 'buy'
       ? { type, inventory, good: 'grain', units: 3, priceMax: 1, cause: 'int.2' }
       : { type, inventory, good: 'grain', units: 3, priceMin: 3, cause: 'int.2' }
-    expect(runner.run(command).events).toEqual([{ type: 'refused', command: type,
+    expect(runner.run(command).events.filter(event => event.type !== 'shared.action.outcome')).toEqual([{ type: 'refused', command: type,
       reason: type === 'buy' ? 'price-above-limit' : 'price-below-limit', price: 2,
       limit: type === 'buy' ? 1 : 3, cause: 'int.2' }])
     expect(JSON.stringify(runner.state)).toBe(before)
@@ -57,7 +57,7 @@ describe('I3 accepted sell intention conserves goods and money', () => {
     expect(ledger.balances).toEqual({ holder: 106, market: 94 })
     expect(ledger.log).toHaveLength(1)
     expect(ledger.log[0]).toMatchObject({ from: 'market', to: 'holder', amount: 6 })
-    expect(result.events).toHaveLength(3)
+    expect(result.events).toHaveLength(4)
     expect(result.events.every(event => event.cause === 'int.3')).toBe(true)
   })
 })

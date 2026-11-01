@@ -103,5 +103,22 @@ acceptance. Planned: consumption from a realism population provider (PLAN step 1
 | I3 | accepted sell | limits at or below price accept; goods and money conserved; every event carries cause |
 | I4 | generic optional cause | non-trade events carry cause too; no cause preserves exact event keys; empty cause throws before effects |
 | I5 | refused replay (E3) | refusal is logged; replay produces byte-identical state and events |
-| I6 | invalid input still throws | NaN, negative and infinite limits throw; bad units, excess stock and no price remain errors even with limits |
+| I6 | invalid input still throws | NaN, negative and infinite limits throw; bad units remain errors; without cause, excess stock and no price remain errors even with limits |
 | I7 | explicit trade price | limits compare given price before market price; zero price and zero limit are valid |
+
+## O — action outcomes (CHAINS CG-16, IF-26; C-Q25)
+
+`test/outcome.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| O1 | accepted trades | buy and sell conserve goods and money; exactly one completed outcome last, with trade stimuli and caused payload |
+| O2 | limit refusals | failed outcome includes reason and unchanged limit fields; no state, balance or ledger changes or provider call |
+| O3 | no price | caused buy/sell refuse with null price before stock checks; uncaused commands retain old throws |
+| O4 | beyond stock | caused buy/sell refuse with requested and available units before limit checks; no effects; uncaused commands still throw |
+| O5 | partial mass take | completes with actual smaller kilograms and stockChanged payload |
+| O6 | empty mass take | caused command fails with no-stock and no effects; uncaused command returns zero without events |
+| O7 | outcome scope | uncaused trades keep event shapes; caused addMass has no outcome; zero requested mass from stocked inventory stays a no-op |
+| O8 | replay (E3) | accepted buy, refused buy and empty takeMass replay to byte-identical state and events |
+| O9 | bad input | invalid numbers, references, weights and empty causes throw; Runner state, events and log unchanged |
+| open | ledger refusal | insufficient money still throws from the money owner's provider; its outcome is undecided; Economy does not catch or reinterpret it |

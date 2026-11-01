@@ -1,9 +1,12 @@
 // Events the reducer returns. The host folds them; the engine never pushes.
 
-export type Refused = { type: 'refused'; command: 'buy' | 'sell'; reason: 'price-above-limit' | 'price-below-limit'; price: number; limit: number; cause?: string }
+export type Refused = { type: 'refused'; command: 'buy' | 'sell' | 'takeMass'; reason: 'price-above-limit' | 'price-below-limit' | 'no-price' | 'beyond-stock' | 'no-stock'; price: number | null; limit?: number; units?: number; available?: number; cause?: string }
+
+export type ActionOutcome = { type: 'shared.action.outcome'; cause: string; status: 'completed' | 'failed'; stimuli: Record<string, string | number | null>[]; payload: EconomyEvent }
 
 export type EconomyEvent = { cause?: string } & (
   | Refused
+  | ActionOutcome
   | { type: 'goodDefined'; good: string }
   | { type: 'recipeDefined'; recipe: string }
   | { type: 'inventoryOpened'; inventory: string; holder: string; market: string }

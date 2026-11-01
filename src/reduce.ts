@@ -17,6 +17,24 @@ export function reduce(state: EconomyState, command: Command, config: EconomyCon
   apply(ctx, command)
   if (command.cause !== undefined) {
     for (const event of ctx.events) event.cause = command.cause
+    if (command.type === 'buy' || command.type === 'sell' || command.type === 'takeMass') {
+      const payload = ctx.events.find(event => event.type === 'refused' || event.type === 'bought' || event.type === 'sold'
+        || (command.type === 'takeMass' && event.type === 'stockChanged'))
+      if (payload) {
+        let stimuli: Record<string, string | number | null>[]
+        if (payload.type === 'refused') {
+          const { type, cause, ...fields } = payload
+          stimuli = [fields]
+        } else if (payload.type === 'bought' || payload.type === 'sold') {
+          const { good, units, price, amount, market, inventory } = payload
+          stimuli = [{ good, units, price, amount, market, inventory }]
+        } else {
+          stimuli = [{ inventory: command.inventory, good: command.good, kg: ctx.takenKg! }]
+        }
+        ctx.events.push({ type: 'shared.action.outcome', cause: command.cause,
+          status: payload.type === 'refused' ? 'failed' : 'completed', stimuli, payload })
+      }
+    }
   }
   const result: ReduceResult = { state: ctx.state, events: ctx.events, minted: ctx.minted, taken: ctx.taken }
   if (command.type === 'takeMass') result.takenKg = ctx.takenKg

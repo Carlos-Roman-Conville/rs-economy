@@ -1,7 +1,7 @@
 export * from './state.ts'
 export * from './ids.ts'
 export * from './config.ts'
-export * from './events.ts'
+export type { EconomyEvent, Refused, ActionOutcome } from './events.ts'
 export * from './providers.ts'
 export * from './queries.ts'
 export * from './labour.ts'
