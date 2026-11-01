@@ -17,10 +17,18 @@ export type Sell = CommandCause & { type: 'sell'; currency?: string; purpose?: '
 export type TakeMass = CommandCause & { type: 'takeMass'; inventory: string; good: string; kg: number }
 export type AddMass = CommandCause & { type: 'addMass'; inventory: string; good: string; kg: number }
 
+/** Delivery applies to this party's outgoing goods. Route endpoints are market ids, with travel days
+ *  supplied by TransportProvider.days; inventory remains the party's receiving inventory on the offer market. */
+export interface DispatchOptions {
+  fromInventory?: string
+  deliver?: { route: { from: string; to: string } }
+}
+type DispatchOffer = Offer & DispatchOptions
+
 export type Command = CommandCause & (
   | { type: 'defineCurrency'; currency: { id: string; issuer?: string | null; backing?: string | null } }
-  | { type: 'offer'; market: string; by: string; inventory: string; give: AssetUnits; want: AssetUnits; expires?: number | null }
-  | { type: 'accept'; offer: string; by: string; inventory: string; units?: number }
+  | ({ type: 'offer'; market: string; by: string; inventory: string; give: AssetUnits; want: AssetUnits; expires?: number | null } & DispatchOptions)
+  | ({ type: 'accept'; offer: string; by: string; inventory: string; units?: number } & DispatchOptions)
   | { type: 'withdraw'; offer: string; by: string }
   | { type: 'exchange'; market?: string; legs: { money?: MoneyLeg[]; goods?: GoodsLeg[] }; kind?: string; subject?: string | null; note?: string }
   | TakeMass
@@ -414,6 +422,21 @@ function offerInventory(ctx: Ctx, id: string, by: string, marketId: string): voi
   const inv = inventory(ctx, id)
   if (inv.holder !== by || inv.market !== marketId) throw new Error('offer inventory must belong to holder on market')
 }
+function dispatchDays(ctx: Ctx, options: DispatchOptions, inv: string, by: string, marketId: string, asset: Asset): number | undefined {
+  const from = inventory(ctx, options.fromInventory ?? inv)
+  if (from.holder !== by) throw new Error('fromInventory must belong to holder')
+  if (options.deliver === undefined) {
+    if ('good' in asset && from.market !== marketId) throw new Error('remote goods require deliver.route')
+    return undefined
+  }
+  if (!('good' in asset)) throw new Error('deliver requires outgoing goods')
+  const { route } = options.deliver
+  if (route.from !== from.market || route.to !== marketId) throw new Error('delivery route must match source and destination markets')
+  const days = ctx.providers.transport.days(route.from, route.to)
+  if (!Number.isFinite(days) || days < 0) throw new Error(`no route from ${route.from} to ${route.to}`)
+  finite(ctx.state.day + days, 'arrival day', 0)
+  return days
+}
 function shortfall(ctx: Ctx, command: 'offer' | 'accept', cause: string | undefined, id: string, q: AssetUnits): boolean {
   if (!('good' in q.asset)) return false // No balance rule (Q19 / ECON-26).
   const available = stockOf(inventory(ctx, id), q.asset.good)
@@ -427,23 +450,44 @@ function removeOffer(ctx: Ctx, marketId: string, offer: Offer, reason?: 'owner' 
   mkt.offers = mkt.offers!.filter(o => o.id !== offer.id)
   if (reason) ctx.events.push({ type: 'offerWithdrawn', offer: offer.id, reason })
 }
-function fillOffer(ctx: Ctx, marketId: string, offer: Offer, by: string, inv: string, units: number): boolean {
+function fillOffer(ctx: Ctx, marketId: string, offer: DispatchOffer, by: string, inv: string, units: number, options: DispatchOptions = {}): boolean {
   const gave = { asset: offer.give.asset, units }
   const got = { asset: offer.want.asset, units: units * (offer.want.units / offer.give.units) }
   positive(got.units)
   const money: MoneyLeg[] = []; const goods: GoodsLeg[] = []
-  const leg = (q: AssetUnits, from: string, to: string, fromInv: string, toInv: string) => {
+  const counters = ctx.state.counters
+  const pending: string[] = []
+  const leg = (q: AssetUnits, from: string, to: string, fromInv: string, toInv: string, dispatch: DispatchOptions) => {
+    const days = dispatchDays(ctx, dispatch, fromInv, from, inventory(ctx, toInv).market, q.asset)
     if ('currency' in q.asset) money.push({ from, to, currency: q.asset.currency, amount: q.units })
-    else goods.push({ from: fromInv, to: toInv, good: q.asset.good, units: q.units })
+    else {
+      const source = dispatch.fromInventory ?? fromInv
+      let destination = toInv
+      if (days !== undefined) {
+        const id = newId(ctx, 'ship')
+        ctx.state.shipments[id] = { id, from: source, to: toInv, good: q.asset.good, units: q.units,
+          departed: ctx.state.day, arrives: ctx.state.day + days, status: 'transit' }
+        pending.push(id)
+        destination = `shipment:${id}`
+      }
+      goods.push({ from: source, to: destination, good: q.asset.good, units: q.units })
+    }
   }
-  leg(gave, offer.by, by, offer.inventory, inv); leg(got, by, offer.by, inv, offer.inventory)
   if (!ctx.providers.ledger.exchange) throw new Error('ledger provider has no exchange (CONTRACTS §22)')
   try {
+    leg(gave, offer.by, by, offer.inventory, inv, offer)
+    leg(got, by, offer.by, inv, offer.inventory, options)
     ctx.providers.ledger.exchange({ money, ...(goods.length ? { goods } : {}) }, 'exchange', offer.id, '',
       goods.length ? goodsLedger(ctx, 'exchange') : undefined)
   } catch {
+    for (const id of pending) delete ctx.state.shipments[id]
+    ctx.state.counters = counters
     removeOffer(ctx, marketId, offer, 'unfilled')
     return false
+  }
+  for (const id of pending) {
+    const { from, to, good, units, arrives } = ctx.state.shipments[id]
+    ctx.events.push({ type: 'shipped', shipment: id, from, to, good, units, arrives, freightTxn: null })
   }
   offer.remaining = units === offer.remaining ? 0 : offer.remaining - units
   if (offer.remaining === 0) removeOffer(ctx, marketId, offer)
@@ -455,14 +499,17 @@ function postOffer(ctx: Ctx, cmd: Extract<Command, { type: 'offer' }>): void {
   const mkt = market(ctx, cmd.market)
   offerInventory(ctx, cmd.inventory, cmd.by, cmd.market)
   validateAsset(ctx, cmd.give); validateAsset(ctx, cmd.want)
+  dispatchDays(ctx, cmd, cmd.inventory, cmd.by, cmd.market, cmd.give.asset)
   if (sameAsset(cmd.give.asset, cmd.want.asset)) throw new Error('offer assets must differ')
   if (cmd.expires != null) finite(cmd.expires, 'expires', 0)
   const ratio = cmd.want.units / cmd.give.units
   positive(ratio)
-  if (shortfall(ctx, 'offer', cmd.cause, cmd.inventory, cmd.give)) return
-  const incoming: Offer = { id: newId(ctx, 'offer'), by: cmd.by, inventory: cmd.inventory,
+  if (shortfall(ctx, 'offer', cmd.cause, cmd.fromInventory ?? cmd.inventory, cmd.give)) return
+  const incoming: DispatchOffer = { id: newId(ctx, 'offer'), by: cmd.by, inventory: cmd.inventory,
     give: structuredClone(cmd.give), want: structuredClone(cmd.want), remaining: cmd.give.units,
-    day: ctx.state.day, expires: cmd.expires ?? null }
+    day: ctx.state.day, expires: cmd.expires ?? null,
+    ...(cmd.fromInventory === undefined ? {} : { fromInventory: cmd.fromInventory }),
+    ...(cmd.deliver === undefined ? {} : { deliver: structuredClone(cmd.deliver) }) }
   ctx.minted = incoming.id
   // Stable sorting preserves mint/insertion order at equal prices, including ids beyond four digits.
   const resting = (mkt.offers ?? []).filter(o => (o.expires === null || o.expires >= ctx.state.day)
@@ -474,7 +521,7 @@ function postOffer(ctx: Ctx, cmd: Extract<Command, { type: 'offer' }>): void {
     if (incoming.remaining <= 0 || wanted <= 0) break
     const r = o.want.units / o.give.units
     const units = Math.min(wanted, o.remaining, incoming.remaining / r)
-    if (fillOffer(ctx, mkt.id, o, cmd.by, cmd.inventory, units)) {
+    if (fillOffer(ctx, mkt.id, o, cmd.by, cmd.inventory, units, cmd)) {
       incoming.remaining = Math.max(0, incoming.remaining - units * r)
       wanted -= units
     }
@@ -503,8 +550,9 @@ function acceptOffer(ctx: Ctx, cmd: Extract<Command, { type: 'accept' }>): void 
   const units = Math.min(cmd.units ?? offer.remaining, offer.remaining)
   const payment = { asset: offer.want.asset, units: units * (offer.want.units / offer.give.units) }
   positive(payment.units)
-  if (shortfall(ctx, 'accept', cmd.cause, cmd.inventory, payment)) return
-  fillOffer(ctx, mkt.id, offer, cmd.by, cmd.inventory, units)
+  dispatchDays(ctx, cmd, cmd.inventory, cmd.by, mkt.id, payment.asset)
+  if (shortfall(ctx, 'accept', cmd.cause, cmd.fromInventory ?? cmd.inventory, payment)) return
+  fillOffer(ctx, mkt.id, offer, cmd.by, cmd.inventory, units, cmd)
 }
 function withdrawOffer(ctx: Ctx, cmd: Extract<Command, { type: 'withdraw' }>): void {
   const found = findOffer(ctx, cmd.offer)

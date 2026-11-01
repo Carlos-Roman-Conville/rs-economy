@@ -219,3 +219,11 @@ unfixed hosts: none
 | M14 | outcomes | incoming shortfall has no effects; fill stimuli |
 | M15 | explicit exchange | only qualifying market exchanges observed |
 | M16 | validation | invalid assets, numbers and ownership throw without effects |
+
+## RD — remote dispatch (design v2 §3–§6)
+
+`test/remote-dispatch.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| RD1 | remote-dispatch | local fill bytes unchanged; owned source inventory; directed market route required across markets; one atomic transfer for money and shipment goods; partial/crossing fills; due-day arrival; per-asset conservation; refusal rollback; exact joint replay |
