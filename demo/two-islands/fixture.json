@@ -1,6 +1,13 @@
 {
   "label": "test fiction (design v2 §8), not pirate facts",
   "seed": 20261101,
+  "ratePriors": {
+    "label": "test fiction (ECON-29, Cognition ruling (a))",
+    "assets": ["fish", "timber", "grain", "salt", "gold", "B.crown"],
+    "mean": { "distribution": "log-uniform", "low": 0.5, "high": 2 },
+    "variance": 4,
+    "stream": "priors"
+  },
   "phases": {
     "isolationDays": 20,
     "contactDays": 60,
@@ -211,7 +218,7 @@
           "persons": "all",
           "from": null,
           "until": null,
-          "note": "test fiction (design v2 §8): B.treasury may issue and mint B.crown against gold; no legal tender"
+          "note": "test fiction (design v2 §8): B.treasury may issue and mint B.crown against gold; no legal tender. The two-islands demo funds starting B.crown via issue only; the fixture defines no coin good, so mint is not exercised here (Government suite tests mint)."
         },
         "condition": {
           "read": "actor.office",

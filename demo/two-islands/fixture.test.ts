@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildDefaultFixtureJson, loadFixture, validateFixture } from './fixture.ts'
+import {
+  assetDefinitions,
+  buildDefaultFixtureJson,
+  loadFixture,
+  seedRatePriors,
+  validateFixture,
+  validateRatePriors,
+} from './fixture.ts'
 
 describe('demo/two-islands fixture (design v2 §8, test fiction)', () => {
   it('loads the committed fixture.json', () => {
@@ -46,6 +53,59 @@ describe('demo/two-islands fixture (design v2 §8, test fiction)', () => {
   it('holds no acceptance, ratioMin or personality keys on any mind', () => {
     const fixture = loadFixture()
     const blob = JSON.stringify(fixture.minds)
+    expect(blob).not.toMatch(/"acceptance"/)
+    expect(blob).not.toMatch(/"ratioMin"/)
+    expect(blob).not.toMatch(/"personality"/)
+  })
+
+  it('seedRatePriors is identical for the same seed and differs for another seed', () => {
+    const fixture = loadFixture()
+    const a = seedRatePriors(fixture, fixture.seed)
+    const b = seedRatePriors(fixture, fixture.seed)
+    const c = seedRatePriors(fixture, fixture.seed + 1)
+    expect(a).toEqual(b)
+    expect(c).not.toEqual(a)
+  })
+
+  it('seedRatePriors emits one row per mind and ordered asset pair with means in range', () => {
+    const fixture = loadFixture()
+    const rows = seedRatePriors(fixture, fixture.seed)
+    expect(rows).toHaveLength(Object.keys(fixture.minds).length * 30)
+    for (const row of rows) {
+      expect(row.mean).toBeGreaterThanOrEqual(0.5)
+      expect(row.mean).toBeLessThanOrEqual(2)
+      expect(row.variance).toBe(4)
+    }
+  })
+
+  it('refuses invalid ratePriors configuration fields', () => {
+    const raw = buildDefaultFixtureJson()
+    const goodIds = new Set((raw.goods as { id: string }[]).map((g) => g.id))
+    const allowed = new Set([...goodIds, 'B.crown'])
+    const base = raw.ratePriors as Record<string, unknown>
+
+    expect(() => validateRatePriors({ ...base, mean: { ...(base.mean as object), low: 0 } }, allowed)).toThrow(
+      /ratePriors\.mean\.low/,
+    )
+    expect(() => validateRatePriors({ ...base, mean: { ...(base.mean as object), high: 0.5 } }, allowed)).toThrow(
+      /ratePriors\.mean\.high/,
+    )
+    expect(() => validateRatePriors({ ...base, variance: 0 }, allowed)).toThrow(/ratePriors\.variance/)
+    expect(() => validateRatePriors({ ...base, assets: ['fish', 'rum'] }, allowed)).toThrow(/ratePriors\.assets\[1\]/)
+  })
+
+  it('assetDefinitions maps rate belief keys for every other listed asset', () => {
+    const fixture = loadFixture()
+    const defs = assetDefinitions(fixture)
+    expect(defs).toHaveLength(6)
+    const fish = defs.find((d) => d.id === 'fish')
+    expect(fish?.rates?.timber).toEqual({ about: 'fish', attribute: 'rate:timber' })
+    expect(fish?.rates?.fish).toBeUndefined()
+  })
+
+  it('holds no acceptance, ratioMin or personality anywhere in the fixture seed', () => {
+    const fixture = loadFixture()
+    const blob = JSON.stringify(fixture)
     expect(blob).not.toMatch(/"acceptance"/)
     expect(blob).not.toMatch(/"ratioMin"/)
     expect(blob).not.toMatch(/"personality"/)

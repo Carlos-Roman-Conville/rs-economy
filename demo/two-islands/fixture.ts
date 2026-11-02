@@ -2,6 +2,7 @@ import rawFixture from './fixture.json' with { type: 'json' }
 import { categorical } from '../../../cognition/src/beliefs.ts'
 import type { AssetDefinition, BeliefEntry, NeedDefinition } from '../../../cognition/src/types.ts'
 import { validateLawData } from '../../../government/src/law/schema.ts'
+import { streams } from '../../../kernel/src/index.ts'
 
 const GOODS = ['fish', 'timber', 'grain', 'salt', 'gold'] as const
 const MARKETS = ['A', 'B'] as const
@@ -42,9 +43,30 @@ export interface FixtureMind {
   readonly reliability: readonly { readonly speaker: string; readonly belief: { readonly alpha: number; readonly beta: number } }[]
 }
 
+export interface RatePriorRow {
+  readonly mind: string
+  readonly give: string
+  readonly want: string
+  readonly mean: number
+  readonly variance: number
+}
+
+export interface RatePriorsConfig {
+  readonly label: string
+  readonly assets: readonly string[]
+  readonly mean: {
+    readonly distribution: 'log-uniform'
+    readonly low: number
+    readonly high: number
+  }
+  readonly variance: number
+  readonly stream: string
+}
+
 export interface TwoIslandsFixture {
   readonly label: string
   readonly seed: number
+  readonly ratePriors: RatePriorsConfig
   readonly phases: {
     readonly isolationDays: number
     readonly contactDays: number
@@ -84,15 +106,87 @@ function expectedNeeds(): NeedDefinition[] {
   ]
 }
 
+const USEFULNESS_BY_ASSET: Record<string, Record<string, number>> = {
+  fish: { hunger: 1 },
+  grain: { hunger: 1 },
+  timber: { shelter: 1 },
+  salt: { preserve: 1 },
+  gold: {},
+  'B.crown': {},
+}
+
 function expectedAssets(): AssetDefinition[] {
-  return [
-    { id: 'fish', usefulness: { hunger: 1 } },
-    { id: 'grain', usefulness: { hunger: 1 } },
-    { id: 'timber', usefulness: { shelter: 1 } },
-    { id: 'salt', usefulness: { preserve: 1 } },
-    { id: 'gold', usefulness: {} },
-    { id: 'B.crown', usefulness: {} },
-  ]
+  return ASSETS.map((id) => ({ id, usefulness: { ...USEFULNESS_BY_ASSET[id] } }))
+}
+
+const MINT_LAW_NOTE_EXTRA =
+  ' The two-islands demo funds starting B.crown via issue only; the fixture defines no coin good, so mint is not exercised here (Government suite tests mint).'
+
+function allowedRatePriorAssets(goodIds: ReadonlySet<string>, currencies: readonly { readonly id: string }[]): ReadonlySet<string> {
+  const allowed = new Set(goodIds)
+  for (const currency of currencies) allowed.add(currency.id)
+  return allowed
+}
+
+export function validateRatePriors(raw: unknown, allowedAssets: ReadonlySet<string>): RatePriorsConfig {
+  if (!isObject(raw)) throw new Error('ratePriors: expected object')
+  if (typeof raw.label !== 'string') throw new Error('ratePriors.label: expected string')
+  if (!Array.isArray(raw.assets)) throw new Error('ratePriors.assets: expected array')
+  for (let i = 0; i < raw.assets.length; i++) {
+    const asset = raw.assets[i]
+    if (typeof asset !== 'string') throw new Error(`ratePriors.assets[${i}]: expected string`)
+    if (!allowedAssets.has(asset)) throw new Error(`ratePriors.assets[${i}]: unknown asset ${asset}`)
+  }
+  if (!isObject(raw.mean)) throw new Error('ratePriors.mean: expected object')
+  if (raw.mean.distribution !== 'log-uniform') throw new Error('ratePriors.mean.distribution: expected log-uniform')
+  if (typeof raw.mean.low !== 'number' || raw.mean.low <= 0) {
+    throw new Error('ratePriors.mean.low: expected number greater than 0')
+  }
+  if (typeof raw.mean.high !== 'number' || raw.mean.high <= raw.mean.low) {
+    throw new Error('ratePriors.mean.high: expected number greater than low')
+  }
+  if (typeof raw.variance !== 'number' || raw.variance <= 0) {
+    throw new Error('ratePriors.variance: expected number greater than 0')
+  }
+  if (typeof raw.stream !== 'string' || !raw.stream) throw new Error('ratePriors.stream: expected non-empty string')
+  return raw as unknown as RatePriorsConfig
+}
+
+export function assetDefinitions(fixture: TwoIslandsFixture): AssetDefinition[] {
+  return fixture.ratePriors.assets.map((id) => {
+    const usefulness = USEFULNESS_BY_ASSET[id]
+    if (usefulness === undefined) throw new Error(`ratePriors.assets: missing usefulness for ${id}`)
+    const rates: Record<string, { about: string; attribute: string }> = {}
+    for (const other of fixture.ratePriors.assets) {
+      if (other === id) continue
+      rates[other] = { about: id, attribute: `rate:${other}` }
+    }
+    return { id, usefulness: { ...usefulness }, rates }
+  })
+}
+
+export function seedRatePriors(fixture: TwoIslandsFixture, seed: number): RatePriorRow[] {
+  const { assets, mean, variance, stream: streamId } = fixture.ratePriors
+  const mindIds = Object.keys(fixture.minds).sort()
+  const keys: { mind: string; give: string; want: string }[] = []
+  for (const mind of mindIds) {
+    for (const give of assets) {
+      for (const want of assets) {
+        if (give === want) continue
+        keys.push({ mind, give, want })
+      }
+    }
+  }
+  keys.sort((a, b) => a.mind.localeCompare(b.mind) || a.give.localeCompare(b.give) || a.want.localeCompare(b.want))
+  const draw = streams(seed).get(streamId)
+  const ratio = mean.high / mean.low
+  return keys.map(({ mind, give, want }) => ({
+    mind,
+    give,
+    want,
+    mean: mean.low * ratio ** draw(),
+    variance,
+  }))
 }
 
 function mindInventoryId(mindId: string, market: string): string {
@@ -167,7 +261,11 @@ export function validateFixture(raw: unknown): TwoIslandsFixture {
     if (failures.length) throw new Error(`government.laws[${i}]: ${failures[0]}`)
   }
 
-  return raw as unknown as TwoIslandsFixture
+  const currencyRecords = Array.isArray(raw.currencies) ? raw.currencies : []
+  const allowedAssets = allowedRatePriorAssets(goodIds, currencyRecords as { id: string }[])
+  const ratePriors = validateRatePriors(raw.ratePriors, allowedAssets)
+
+  return { ...(raw as object), ratePriors } as unknown as TwoIslandsFixture
 }
 
 export function loadFixture(): TwoIslandsFixture {
@@ -208,17 +306,17 @@ export function buildDefaultFixtureJson(): Record<string, unknown> {
     }
   }
 
+  const jurisdictionBase = {
+    authority: 'B',
+    places: ['B'],
+    persons: 'all',
+    from: null,
+    until: null,
+  }
+
   const lawBase = {
     issuer: 'B',
     enactment: 'event.enactment.b-crown-authority',
-    jurisdiction: {
-      authority: 'B',
-      places: ['B'],
-      persons: 'all',
-      from: null,
-      until: null,
-      note: 'test fiction (design v2 §8): B.treasury may issue and mint B.crown against gold; no legal tender',
-    },
     condition: { read: 'actor.office', op: 'eq', value: 'B.treasury' },
     exceptions: [],
     consequence: { kind: 'void' },
@@ -229,9 +327,18 @@ export function buildDefaultFixtureJson(): Record<string, unknown> {
     sources: [{ key: 'b-crown-authority', title: 'Island B crown authority (test fiction)', year: null, locator: null }],
   }
 
+  const ratePriors = {
+    label: 'test fiction (ECON-29, Cognition ruling (a))',
+    assets: [...ASSETS],
+    mean: { distribution: 'log-uniform' as const, low: 0.5, high: 2 },
+    variance: 4,
+    stream: 'priors',
+  }
+
   return {
     label: 'test fiction (design v2 §8), not pirate facts',
     seed: 20261101,
+    ratePriors,
     phases: {
       isolationDays: 20,
       contactDays: 60,
@@ -256,12 +363,22 @@ export function buildDefaultFixtureJson(): Record<string, unknown> {
         {
           id: 'government/law.b-crown-issue',
           ...lawBase,
+          jurisdiction: {
+            ...jurisdictionBase,
+            note: 'test fiction (design v2 §8): B.treasury may issue and mint B.crown against gold; no legal tender',
+          },
           modality: 'empower',
           regulated: { action: 'exercise:issue', object: 'any', power: 'issue' },
         },
         {
           id: 'government/law.b-crown-mint',
           ...lawBase,
+          jurisdiction: {
+            ...jurisdictionBase,
+            note:
+              'test fiction (design v2 §8): B.treasury may issue and mint B.crown against gold; no legal tender' +
+              MINT_LAW_NOTE_EXTRA,
+          },
           modality: 'empower',
           regulated: { action: 'exercise:mint', object: 'any', power: 'mint' },
         },
