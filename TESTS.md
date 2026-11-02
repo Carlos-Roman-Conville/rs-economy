@@ -227,3 +227,11 @@ unfixed hosts: none
 | Id | Rule under test | Must hold |
 |---|---|---|
 | RD1 | remote-dispatch | local fill bytes unchanged; owned source inventory; directed market route required across markets; one atomic transfer for money and shipment goods; partial/crossing fills; due-day arrival; per-asset conservation; refusal rollback; exact joint replay |
+
+## SL — shipment loss
+
+`test/shipment-loss.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| SL1 | shipment-loss | host-commanded loss transfers remaining cargo once to the named inventory; lost shipments never arrive; per-asset conservation including lost inventory; ordinary and remote dispatch replay exactly; unknown shipment/inventory and arrived/lost shipments refuse without effects; partially and fully spoiled cargo resolve |

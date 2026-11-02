@@ -47,6 +47,7 @@ export type Command = CommandCause & (
   | Sell   // inventory -> its market's stock; money market -> holder
   | Buy    // market's stock -> inventory; money holder -> market
   | { type: 'ship'; from: string; to: string; good: string; units: number; freight?: { payer: string; payee: string; amount: number } }
+  | { type: 'loseShipment'; shipment: string; to: string }
   | { type: 'tick' }
 )
 
@@ -73,6 +74,7 @@ export function apply(ctx: Ctx, command: Command): void {
     case 'sell': return trade(ctx, 'sell', command.inventory, command.good, command.units, command.price, command.priceMin, command.cause, command.currency, command.purpose)
     case 'buy': return trade(ctx, 'buy', command.inventory, command.good, command.units, command.price, command.priceMax, command.cause, command.currency, command.purpose)
     case 'ship': return ship(ctx, command.from, command.to, command.good, command.units, command.freight ?? null)
+    case 'loseShipment': return loseShipment(ctx, command.shipment, command.to)
     case 'tick': return tick(ctx)
     default: throw new Error(`unknown command: ${(command as { type: string }).type}`)
   }
@@ -341,6 +343,26 @@ function ship(ctx: Ctx, fromId: string, toId: string, goodId: string, units: num
   })
   ctx.minted = id
   ctx.events.push({ type: 'shipped', shipment: id, from: fromId, to: toId, good: goodId, units, arrives, freightTxn })
+}
+
+/** The host decides the loss; remaining cargo moves to its inventory and can no longer arrive. */
+function loseShipment(ctx: Ctx, id: string, toId: string): void {
+  const shipment = must(ctx.state.shipments, id, 'shipment')
+  const to = inventory(ctx, toId)
+  if (shipment.status !== 'transit') throw new Error(`shipment is not in transit: ${id}`)
+  const reason = `loseShipment:${id}`
+  const ledger = goodsLedger(ctx, reason)
+  if (shipment.units > 0) {
+    transfer(new TransferJournal('economy.goods'), {
+      t: simTime(ctx.state.day * 86_400_000), process: 'economy.trade.shipment', quantity: shipment.good,
+      unit: 'count', amount: shipment.units,
+      from: { ledger, account: `shipment:${id}` }, to: { ledger, account: to.id },
+    })
+  } else {
+    // Fully spoiled cargo has no positive quantity to transfer, as on arrival.
+    adjust(ctx, to, shipment.good, 0, reason)
+  }
+  shipment.status = 'lost'
 }
 
 function defineCurrency(ctx: Ctx, def: { id: string; issuer?: string | null; backing?: string | null }): void {

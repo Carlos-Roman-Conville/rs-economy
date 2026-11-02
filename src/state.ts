@@ -77,7 +77,7 @@ export interface Shipment {
   units: number
   departed: number             // day
   arrives: number              // day; the tick lands it when state.day >= arrives
-  status: 'transit' | 'arrived'
+  status: 'transit' | 'arrived' | 'lost'
 }
 
 /** A company, guild or fleet: a holder that owns inventories (and later ships). The engine stores it, the host decides. */
