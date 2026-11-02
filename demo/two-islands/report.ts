@@ -4,7 +4,7 @@ import { balanceOf, ledger } from '../../../settlement/src/index.ts'
 import { acceptance, type AcceptanceRecord } from '../../../society/src/index.ts'
 import type { PersonId } from '../../../society/src/index.ts'
 import type { TwoIslandsFixture } from './fixture.ts'
-import { runTwoIslands } from './run.ts'
+import { runTwoIslands, type DaySnapshot } from './run.ts'
 
 export type TwoIslandsRunResult = ReturnType<typeof runTwoIslands>
 export type ReportOutcome = 'converged' | 'gap-persists' | 'rival-conventions' | 'undetermined'
@@ -12,6 +12,8 @@ export type ReportOutcome = 'converged' | 'gap-persists' | 'rival-conventions' |
 export interface ReportOptions {
   /** Test-only wrapper: alternate Society records without touching the run. */
   records?: readonly AcceptanceRecord[]
+  /** Run extra seeds for the summary table (expensive). */
+  seeds?: boolean
 }
 
 export interface RatioDayRow {
@@ -76,6 +78,28 @@ export interface RefusalDayRow {
   byReason: Record<string, number>
 }
 
+export interface CrossDayRow {
+  day: number
+  crossOffers: number
+  crossFills: number
+  ratioGap: number | null
+}
+
+export interface CrossSeries {
+  days: CrossDayRow[]
+  lastCrossFillDay: number | null
+  totalCrossFills: number
+  last10Days: { crossOffers: number; bestRatioProduct: number | null }
+}
+
+export interface SeedSummaryRow {
+  seed: number
+  outcome: ReportOutcome
+  totalCrossFills: number
+  lastCrossFillDay: number | null
+  last10RatioProduct: number | null
+}
+
 export interface TwoIslandsReport {
   seed: number
   ratios: RatioSeries[]
@@ -84,6 +108,8 @@ export interface TwoIslandsReport {
   media: MediaSeries[]
   volume: VolumeDayRow[]
   refusals: RefusalDayRow[]
+  cross: CrossSeries
+  seeds: SeedSummaryRow[]
   outcome: ReportOutcome
 }
 
@@ -145,6 +171,119 @@ function topMedium(state: TwoIslandsRunResult['state']['economy'], market: strin
 function crossIslandTrades(result: TwoIslandsRunResult, fixture: TwoIslandsFixture, fromDay: number, toDay: number) {
   return (result.state.economy.trades ?? []).filter(t => t.day >= fromDay && t.day <= toDay
     && fixture.minds[t.maker].market !== fixture.minds[t.taker].market)
+}
+
+type BookRow = DaySnapshot['book'][number]
+
+function isCrossPoster(fixture: TwoIslandsFixture, market: string, by: string): boolean {
+  return fixture.minds[by].market !== market
+}
+
+export function ratioGapFromBook(book: readonly BookRow[], fixture: TwoIslandsFixture): number | null {
+  const byMarket = new Map<string, BookRow[]>()
+  for (const row of book) {
+    const list = byMarket.get(row.market) ?? []
+    list.push(row)
+    byMarket.set(row.market, list)
+  }
+  let lowest: number | null = null
+  for (const rows of byMarket.values()) {
+    const assets = [...new Set(rows.flatMap(r => [r.give, r.want]))]
+    for (let i = 0; i < assets.length; i++) {
+      for (let j = i + 1; j < assets.length; j++) {
+        const x = assets[i], y = assets[j]
+        let bestXY: { ratio: number; cross: boolean } | null = null
+        let bestYX: { ratio: number; cross: boolean } | null = null
+        for (const row of rows) {
+          if (row.give === x && row.want === y) {
+            const cross = isCrossPoster(fixture, row.market, row.by)
+            if (!bestXY || row.ratio < bestXY.ratio) bestXY = { ratio: row.ratio, cross }
+          }
+          if (row.give === y && row.want === x) {
+            const cross = isCrossPoster(fixture, row.market, row.by)
+            if (!bestYX || row.ratio < bestYX.ratio) bestYX = { ratio: row.ratio, cross }
+          }
+        }
+        if (!bestXY || !bestYX || (!bestXY.cross && !bestYX.cross)) continue
+        const product = bestXY.ratio * bestYX.ratio
+        if (lowest === null || product < lowest) lowest = product
+      }
+    }
+  }
+  return lowest
+}
+
+function crossOffersPostedByDay(result: TwoIslandsRunResult, fixture: TwoIslandsFixture): Map<number, number> {
+  const counts = new Map<number, number>()
+  let day = 0
+  for (const { command } of result.logs.economy) {
+    if (command.type === 'tick') { day++; continue }
+    if (command.type === 'offer' && fixture.minds[command.by].market !== command.market) {
+      counts.set(day, (counts.get(day) ?? 0) + 1)
+    }
+  }
+  return counts
+}
+
+function buildCross(result: TwoIslandsRunResult, fixture: TwoIslandsFixture): CrossSeries {
+  const contactFrom = fixture.phases.isolationDays
+  const crossOffersByDay = crossOffersPostedByDay(result, fixture)
+  const days: CrossDayRow[] = result.days.map(({ day, trades, book }) => {
+    const crossFills = trades.filter(t => fixture.minds[t.maker].market !== fixture.minds[t.taker].market).length
+    return {
+      day,
+      crossOffers: crossOffersByDay.get(day) ?? 0,
+      crossFills,
+      ratioGap: ratioGapFromBook(book, fixture),
+    }
+  })
+  const contactFills = crossIslandTrades(result, fixture, contactFrom, result.days.at(-1)?.day ?? 0)
+  let lastCrossFillDay: number | null = null
+  for (const trade of contactFills) lastCrossFillDay = lastCrossFillDay === null ? trade.day : Math.max(lastCrossFillDay, trade.day)
+  const lastDay = result.days.at(-1)?.day ?? 0
+  const from10 = Math.max(0, lastDay - 9)
+  let crossOffers10 = 0
+  let bestRatioProduct: number | null = null
+  for (const row of days) {
+    if (row.day < from10 || row.day > lastDay) continue
+    crossOffers10 += row.crossOffers
+    if (row.ratioGap !== null && (bestRatioProduct === null || row.ratioGap < bestRatioProduct)) {
+      bestRatioProduct = row.ratioGap
+    }
+  }
+  return {
+    days,
+    lastCrossFillDay,
+    totalCrossFills: contactFills.length,
+    last10Days: { crossOffers: crossOffers10, bestRatioProduct },
+  }
+}
+
+function reportGapOnly(result: TwoIslandsRunResult, fixture: TwoIslandsFixture): GapSeries[] {
+  const state = result.state.economy
+  const travelDays = fixture.phases.route.travelDays
+  const lossProbability = fixture.phases.route.lossProbability
+  const band = { travelDays, lossProbability }
+  const markets = Object.values(fixture.islands)
+  const marketA = markets.find(i => i.market === fixture.phases.route.from)!
+  const marketB = markets.find(i => i.market === fixture.phases.route.to)!
+  const pairs = assetPairs(fixture.ratePriors.assets)
+  const gapOut: GapSeries[] = []
+  for (const { give, want } of pairs) {
+    const a = asAsset(state, give)
+    const b = asAsset(state, want)
+    const days: GapDayRow[] = result.days.map(({ day }) => {
+      const ratiosA = ratios(state, marketA.market, a, b, day, day).map(r => r.ratio)
+      const ratiosB = ratios(state, marketB.market, a, b, day, day).map(r => r.ratio)
+      const medianA = median(ratiosA)
+      const medianB = median(ratiosB)
+      const gap = medianA !== null && medianB !== null ? relativeGap(medianA, medianB) : null
+      const inside = gap !== null ? insideBand(gap, travelDays, lossProbability) : null
+      return { day, medianA, medianB, gap, band, insideBand: inside }
+    })
+    gapOut.push({ give, want, days })
+  }
+  return gapOut
 }
 
 function measureOutcome(result: TwoIslandsRunResult, fixture: TwoIslandsFixture, gap: GapSeries[]): ReportOutcome {
@@ -261,6 +400,26 @@ export function report(result: TwoIslandsRunResult, fixture: TwoIslandsFixture, 
     return { day, byReason }
   })
 
+  const cross = buildCross(result, fixture)
+  const outcome = measureOutcome(result, fixture, gapOut)
+  let seeds: SeedSummaryRow[] = []
+  if (options.seeds) {
+    const seedList = [result.seed.value, 1, 2, 3, 4]
+    const dayCount = result.days.length
+    seeds = seedList.map(seed => {
+      const run = seed === result.seed.value ? result : runTwoIslands(fixture, { seed, days: dayCount })
+      const rowCross = buildCross(run, fixture)
+      const rowGap = seed === result.seed.value ? gapOut : reportGapOnly(run, fixture)
+      return {
+        seed,
+        outcome: measureOutcome(run, fixture, rowGap),
+        totalCrossFills: rowCross.totalCrossFills,
+        lastCrossFillDay: rowCross.lastCrossFillDay,
+        last10RatioProduct: rowCross.last10Days.bestRatioProduct,
+      }
+    })
+  }
+
   return {
     seed: result.seed.value,
     ratios: ratioOut,
@@ -269,6 +428,8 @@ export function report(result: TwoIslandsRunResult, fixture: TwoIslandsFixture, 
     media: mediaOut,
     volume,
     refusals,
-    outcome: measureOutcome(result, fixture, gapOut),
+    cross,
+    seeds,
+    outcome,
   }
 }

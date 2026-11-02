@@ -7,7 +7,7 @@ import { runTwoIslands } from './run.ts'
 const root = fileURLToPath(new URL('.', import.meta.url))
 const fixture = loadFixture()
 const result = runTwoIslands(fixture)
-const data = report(result, fixture)
+const data = report(result, fixture, { seeds: true })
 
 function fmt(value: number | null): string {
   return value === null ? 'null' : value.toFixed(4)
@@ -68,6 +68,19 @@ sections.push('')
 sections.push('## Refusals by reason', '')
 sections.push(table(['day', 'reasons'],
   data.refusals.map(row => [String(row.day), Object.entries(row.byReason).map(([k, v]) => `${k}:${v}`).join(', ') || '—'])))
+sections.push('')
+
+sections.push('## Cross-island trade', '')
+sections.push(table(['day', 'cross offers', 'cross fills', 'ratio gap'],
+  data.cross.days.map(row => [String(row.day), String(row.crossOffers), String(row.crossFills), fmt(row.ratioGap)])))
+sections.push('')
+const last = data.cross.lastCrossFillDay
+sections.push(`Cross fills: ${data.cross.totalCrossFills} over the contact phase, last on day ${last === null ? 'null' : String(last)}. Last 10 days: ${data.cross.last10Days.crossOffers} cross offers posted, best ratio product ${fmt(data.cross.last10Days.bestRatioProduct)} (above 1 means the offers did not cross).`, '')
+
+sections.push('## Seeds', '')
+sections.push(table(['seed', 'outcome', 'cross fills', 'last cross fill day', 'last-10 ratio product'],
+  data.seeds.map(row => [String(row.seed), row.outcome, String(row.totalCrossFills),
+    row.lastCrossFillDay === null ? 'null' : String(row.lastCrossFillDay), fmt(row.last10RatioProduct)])))
 sections.push('')
 
 sections.push(`## Outcome`, '', `**${data.outcome}**`, '',

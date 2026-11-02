@@ -48,6 +48,7 @@ export interface DaySnapshot {
   trades: Trade[]
   refusals: Extract<EconomyEvent, { type: 'refused' }>[]
   report: { acceptance: Record<string, Record<string, number | null>> }
+  book: { market: string; give: string; want: string; by: string; ratio: number }[]
 }
 
 const assetId = (asset: Asset) => 'good' in asset ? asset.good : asset.currency
@@ -313,11 +314,18 @@ export function runTwoIslands(fixture: TwoIslandsFixture, opts: { seed?: number;
     }
     const snapshot: DaySnapshot = { day, totals: totals(economy, settlement), trades,
       refusals: economy.events.slice(start).filter((e): e is Extract<EconomyEvent, { type: 'refused' }> => e.type === 'refused'),
-      report: { acceptance: {} } }
+      report: { acceptance: {} }, book: [] }
     for (const island of Object.values(fixture.islands)) {
       snapshot.report.acceptance[island.organisation] = {}
       for (const asset of definitions) snapshot.report.acceptance[island.organisation][asset.id] =
         acceptance(island.mindIds.map(person), asset.id, { from: 0, to: day }, records)
+    }
+    snapshot.book = []
+    for (const market of markets) {
+      for (const offer of economy.state.markets[market].offers ?? []) {
+        snapshot.book.push({ market, give: assetId(offer.give.asset), want: assetId(offer.want.asset), by: offer.by,
+          ratio: offer.want.units / offer.give.units })
+      }
     }
     days.push(snapshot)
   }
