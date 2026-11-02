@@ -1,6 +1,6 @@
 {
   "name": "@rex/economy",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "The economy engine: goods, recipes, inventories, markets (stock, consumption, reserve, production, price), labour market, trade and transport, organisations, business accounting. A reducer plus a daily tick; no game imports. The pirate ports are its first client.",
   "private": true,
   "type": "module",
