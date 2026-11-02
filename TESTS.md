@@ -235,3 +235,11 @@ unfixed hosts: none
 | Id | Rule under test | Must hold |
 |---|---|---|
 | SL1 | shipment-loss | host-commanded loss transfers remaining cargo once to the named inventory; lost shipments never arrive; per-asset conservation including lost inventory; ordinary and remote dispatch replay exactly; unknown shipment/inventory and arrived/lost shipments refuse without effects; partially and fully spoiled cargo resolve |
+
+## TIH — two-islands host
+
+`demo/two-islands/run.test.ts` (isolated demo Vitest config)
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| TIH1 | autonomous host | deterministic seeded minds and rate priors; joint replay; daily conservation including shipments/loss; atomic fills; isolation; voyage capacity and loss; Society/report and seed fences; bootstrap offers; perceived-rate learning; authorised issue only |
