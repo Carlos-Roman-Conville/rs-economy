@@ -53,6 +53,10 @@ autonomous port benchmark, tests I1 and I2 beside the game's 385 others.
 Not built: step 11, consumption from a realism population provider (waits on the body-and-world keeper); recipe
 quantities as data (the balance lane's); the game's own use of the adapter.
 
+## Release and dist
+
+Consumers get compiled JavaScript (Node will not type-strip `.ts` under `node_modules`). Run `npm run build` and commit `dist/` with every `src` change. A gate checks it with `npm run build && git diff --quiet -- dist`.
+
 ## Marks
 
 **(Rex)** his decision, restated. **(proposed)** this keeper's suggestion. **(open)** only Rex can answer; the

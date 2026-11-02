@@ -4,8 +4,11 @@
   "description": "The economy engine: goods, recipes, inventories, markets (stock, consumption, reserve, production, price), labour market, trade and transport, organisations, business accounting. A reducer plus a daily tick; no game imports. The pirate ports are its first client.",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "src", "README.md"],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "ports": "node --experimental-strip-types examples/three-ports.ts"
@@ -19,6 +22,6 @@
     "vitest": "^5.0.5"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   }
 }
