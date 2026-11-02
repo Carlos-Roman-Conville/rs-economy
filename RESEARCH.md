@@ -119,8 +119,138 @@ econ 2 (`port.cash` as treasury), econ 3 (who values property: Ligon's plantatio
 sugar and £7,000 for half of it with stock after, are the only period valuations opened, and they are not town
 buildings), econ 4 (named characters' spending), Q9 (idle fixtures), GOODS Open 1 and Open 6 (Rex's by his word).
 
+## 7. ECON-30: who bears the loss of cargo lost at sea
+
+Question (ISSUES ECON-30, design v2 §5.9): when an offer fills across islands the goods travel in a shipment that can
+be lost, and today title passes at the fill, so the receiver bears the loss with no compensation. Labels as above.
+Keys for this section (URLs in the list at the end): ECON-POI, ECON-WBO, ECON-ROM, ECON-FED, ECON-DOS, ECON-WGA,
+ECON-MAT, ECON-ECH, ECON-LEO, ECON-PSY.
+
+### 7.1 Risk in transit, by contract form
+
+| Form | Who bore the loss at sea, and when it passed | Period, place | Label | Source |
+|---|---|---|---|---|
+| Commenda / colleganza, unilateral (investor supplies all the capital) | The investor ("commendator", Venetian *stans*) bore all loss of the capital; the travelling partner bore none of it and lost only his labour. Profit split 3/4 investor, 1/4 traveller. The capital stayed the investor's throughout, so title never passed | archetypal form in the statutes and contracts of Genoa, Venice, Amalfi, Marseilles, Barcelona; the first statute is Pisa's *Constitutum Usus*, 1156; Venice's *Usus Venetorum* gives the colleganza primacy over custom. Dubrovnik differed (no 3/4–1/4 rule) | researched | ECON-POI |
+| Commenda, bilateral (traveller adds capital, usually half the investor's) | Loss shared 2/3 investor, 1/3 traveller (profit 1/2–1/2): loss follows each side's capital | same ports | researched | ECON-POI |
+| Venetian rule on a lost colleganza | The traveller must account in detail and swear to it, "except those who suffered a shipwreck or robbery", for whom "the ancient custom" holds. So a loss at sea or by robbery discharges him from the oath, not from the account | amendment of 1229 | researched | ECON-POI |
+| Sea loan (*foenus nauticum*, *cambium maritimum*), bottomry (loan on the ship), respondentia (loan on the cargo) | The lender bore the risk of the voyage ("acts of God or pirates"): the sum is forgiven if the vessel is lost. The lender's return is "interest" plus an "insurance premium" for that risk, and he does not bear the risk of buying and selling the goods. Title to the ship or cargo stayed with the borrower, charged to the lender | Greek bottomry in the 4th c. BC (Demosthenes, *Against Zenothemis*); Genoa and Venice at the time of the Crusades. Genoese rates, late 12th c.: about 50% to Syria, 25–30% to Sicily, 20–30% to North Africa, 10–20% to Sardinia, Corsica and southern France (Hoover, quoted by Poitras). Poitras warns that the fixed return may be disguised expected profit, and that the form may hide a commenda or an evasion of usury | researched | ECON-POI, ECON-WBO |
+| Straight sale, delivery at the port of loading | Risk passes to the buyer once the sale is made: *emptione perfecta periculum transit ad emptorem* (Justinian's Institutes 3.23.3; Digest 18.6.8 pr). Whether the rule is classical or Justinian's own is disputed in the scholarship. Modern FOB and CIF are the same shape: the risk passes at the port of shipment (on board, since Incoterms 2010) even though CIF has the seller buy the insurance | Rome (Justinian, 6th c.); FOB/CIF from modern commercial law | researched (Rome; modern); no medieval or 17th-c. sale contract found | ECON-ROM, ECON-FED |
+| Straight sale, delivery at destination (the shape of "ex ship" or "to arrive" terms) | By the form of the contract the seller bears the loss until delivery. I found no source for how often medieval or Caribbean merchants used it, and none for the Roman exceptions to *periculum est emptoris* beyond the statement that "periculum est venditoris" appears in some Digest texts | not found | **estimate** (follows from the term's meaning, not from a dated contract) | ECON-ROM |
+
+Not found: a notarial sale that states where risk passes; the Roman exceptions in detail; the Caribbean practice for
+sales (the Ligon and CSP prices in sections 1–2 are delivered or loaded prices, not stated to be either).
+
+### 7.2 General average
+
+**What qualifies.** A deliberate sacrifice of part of the ship or cargo (the classic case is jettison, throwing goods
+overboard to lighten a ship in a storm) to save the rest from a common danger, and the voyage then succeeds. The three
+elements are common danger, a voluntary sacrifice, and a saved outcome (ECON-WGA). Goods lost by the storm itself,
+unchosen, do not qualify: the loss lies where it fell (the principle is the sacrifice for others, ECON-DOS).
+
+**Who contributes, and how much.** All the parties to the venture share the loss pro rata; the owners of the goods
+thrown out sue the carrier, who recovers from the owners of the goods saved ("pro rata sarcire damnum jacturae",
+Cujas, quoted by ECON-DOS). Lex Rhodia de iactu, Digest 14.2: Paul's *Sentences* (and Digest 14.2.1) state that what
+was given for all must be made good "by the assessment of all" (ECON-WGA, ECON-MAT). The text may come from the
+Rhodian sea law (an early form dated about 800 BC by the Wikipedia article; the original is lost; ECON-WGA) or be a
+Roman jurists' creation, which the scholarship leaves open (ECON-DOS). I did not retrieve the Digest's rule for how
+ship, freight and cargo are valued, so the proportion is "by value, pro rata" and no more (**researched** for the pro
+rata principle; the valuation basis is **not found**).
+
+**Later practice.** The rule passed through the Rôles d'Oléron (art. VI) and the Consolat de Mar (ch. CXVIII) to the
+Hanseatic, Genoese, Catalan and Amsterdam codes; the 1681 French *Ordonnance de la marine* shaped later codes; the York–
+Antwerp Rules codified it in 1890 (ECON-WGA, ECON-MAT). So general average is old and constant across the whole
+period the game covers.
+
+### 7.3 Marine insurance
+
+| Item | Figure | Period, place | Label | Source |
+|---|---|---|---|---|
+| Datini policy | 1,200 gold florins of goods, Genoa to Palermo, premium 54 florins = 4.5% of the insured value | December 1385, Genoa/Florence (the Datini firm bought the cover) | researched, from a project summary of the policy, not the contract text | ECON-ECH |
+| Pisan merchant's policy | 100 florins insured with a Genoese merchant at 7.5%; goods cheese and leather, Palermo to Pisa | 1347 | researched, same caveat | ECON-ECH |
+| Registration | policies had to be entered in a public register and taxed at 0.5% of the insured value | end of the 14th c., Genoa | researched, same caveat | ECON-ECH |
+| Buyers and sellers | the buyers were merchants insuring their own cargo; the cover was written by several underwriters sharing a risk, and the same firm (Borromei) both bought and sold cover | Genoa and Florence, 14th c.; Borromei in London, 1438 (broadcloth to Bruges, 5.86%) | researched | ECON-LEO, ECON-ECH |
+| London pricing | premiums are always a percentage of the insured value (ship, cargo or freight); in the 17th century London rates fell by more than half and in some cases 75% as English trade and colonial re-exports (tobacco, sugar) grew; policies were bought by merchants (Marescoe bought 108 policies from 31 underwriters in 47 months from 1664) and covered Virginia, Barbados and India | London, 1600s | researched | ECON-LEO |
+| West Indies rates | a dozen London/Bristol–Jamaica rates in 1740 ran 2.5–5% (mean 4.3%); peacetime rates later 2–2.25% (1775). I found no 17th-c. West Indies rate | 18th c. | researched, not the period; no 17th-c. figure | ECON-LEO |
+| Claim terms | a London underwriter of the 1660s was criticised for paying late (3 to 6 months) and deducting 10–15% from a claim in addition to the premium; paying a higher premium avoided the deduction; Hamburg and Amsterdam were preferred for cover | 1660s–70s | researched | ECON-LEO |
+
+Amsterdam's premium lists are covered by Spooner's *Risks at Sea* (1983) but I read nothing from it, only its 1766–80
+dates; the Amsterdam 17th-c. rate is **not found**.
+
+### 7.4 What this gives the engine
+
+For a plain fill between two holders: the period has no single rule. Every contract in 7.1 puts the loss on whoever
+holds the capital at risk: the investor in a commenda, the lender in a sea loan, the buyer after a sale at the port of
+loading, the seller in a sale delivered at destination. The risk follows ownership of the goods in transit, and a
+price was set to compensate for it (a sea loan's premium, 10–50% of a Genoese loan; insurance, 4.5–7.5% in the 14th c.).
+Insurance was the way a merchant who bore the risk laid it off.
+
+### 7.5 Proposed mechanism
+
+**Proposed mechanism** (the smallest set the sources support; nothing here is an engine rule until the Economy keeper
+adopts it):
+
+- **(a) Default for a plain cross-market fill: the receiving holder bears the transit risk, from the moment of the fill.**
+  The form: a straight sale with delivery at the port of loading, in which the buyer owns the goods from the sale
+  (ECON-ROM, Justinian's Institutes 3.23.3; the same shape as FOB and CIF, ECON-FED). This matches what the engine does
+  today, so the existing rule is **researched** for the form, not merely an estimate. Why it is the right default for a
+  simple barter or sale between two holders: it is the one form in 7.1 that needs no third party and no later
+  accounting, and in a sale (unlike a commenda or a sea loan) there is no continuing owner-lender relationship to put
+  the loss on. The sources do not support a seller-bears default; that is the "delivery at destination" form, which
+  the sources show only as a contract term.
+- **(b) Contracts a host can choose** (each optional; none is the default):
+  1. *Delivery at destination* (seller bears loss until arrival): the same fill with a different risk holder; owner
+     **Economy** (it owns the fill and the shipment). Label: estimate; no dated source.
+  2. *Sea loan* (lender bears the voyage risk, repaid with premium on safe arrival, forgiven if lost): a credit
+     contract with a rate decided by the host; owner **Settlement** (it owns debt and credit between holders). Label:
+     researched (ECON-POI, ECON-WBO).
+  3. *Commenda* (investor bears all capital loss, traveller bears none and shares profit 3/4–1/4): a partnership in
+     goods carried; owner **Society** (it owns partnerships and shares). Label: researched (ECON-POI).
+  4. *General average* (a sacrifice to save the shipment is shared pro rata by value among everyone with goods
+     aboard): owner **Economy**, since only the shipment knows what was aboard. Label: researched for the principle
+     (ECON-WGA, ECON-DOS); the valuation basis is open.
+  5. *Insurance* (a premium of a fixed share of the insured value, paid by the owner at risk to an underwriter who
+     pays the loss; the 14th-c. range is 4.5–7.5%): owner **Settlement**. Label: researched for the figures (ECON-ECH,
+     ECON-LEO); the claim deduction of 10–15% is a 1660s London detail.
+- **(c) Left open by the sources: fiction for Rex.**
+  - **fiction**: the chance that a shipment is lost on a given leg. No source opened gives a loss rate per voyage
+    (insurance premiums give the price of the risk, 2–7.5%, not the frequency; a premium of 4.5% is not a 4.5% chance
+    of loss because it includes the underwriter's costs and margin).
+  - **fiction**: whether a host starts with insurance available at all (14th-c. Genoa had it; the Caribbean island
+    towns of the game's period are not shown to have had local underwriters; Marescoe bought cover in London, not in
+    Barbados).
+  - **fiction**: partial loss versus total loss, and who pays the cost of recovering a wreck: the sources opened say
+    nothing.
+  - **fiction**: the cap for general average and the valuation rule (Digest 14.2's valuation text was not retrieved).
+
+### 7.6 Sources
+
+- ECON-POI: Poitras, "From Commenda to Joint-Stock Company", ch. 5 of *Equity Capital*, https://www.sfu.ca/~poitras/Equity-Capital_ch5.pdf
+  (commenda shares and loss, the 1156 Pisan statute, Venice's 1229 amendment, sea-loan risk and Genoese rates; read in full text).
+- ECON-WBO: "Bottomry", https://en.wikipedia.org/wiki/Bottomry (lender bears the risk; Demosthenes; respondentia; secondary).
+- ECON-ROM: Konstantinović and others on *periculum est emptoris*, search listing https://ceeol.com/search/article-detail?id=1110876
+  and https://revistas.usp.br/rfdusp/article/view/67893 (abstracts only; classical-or-Justinianic dispute).
+- ECON-FED: Federal Court of Australia, Stewart J, "World in a Box", https://www.fedcourt.gov.au/digital-law-library/judges-speeches/justice-stewart/stewart-j-20200923
+  (FOB and CIF: risk passes at the port of shipment; read as a search summary).
+- ECON-DOS: Dostalík, "Lex Rhodia de iactu and general average", *Gdańskie Studia Prawnicze*,
+  https://czasopisma.bg.ug.edu.pl/index.php/gdanskie_studia_prawnicze/article/view/5251 (full text
+  https://czasopisma.bg.ug.edu.pl/index.php/gdanskie_studia_prawnicze/article/download/5251/4580; pro rata, Cujas).
+- ECON-WGA: "General average", https://en.wikipedia.org/wiki/General_average (elements, Paulus, Oléron, 1681, York–Antwerp; secondary).
+- ECON-MAT: Mataix, "Lex Rhodia & the transmission of ancient maritime custom", https://msrg.blogs.lincoln.ac.uk/?p=510
+  (D.14.2.1; Oléron VI and Consolat de Mar CXVIII; abstract only).
+- ECON-ECH: ECONOMICHISTORY project report (Datini 1385 and 1347 policies, 0.5% tax), https://cordis.europa.eu/project/id/295710/reporting/fr
+  (read as a search summary; the contract texts not seen).
+- ECON-LEO: Leonard, "The pricing revolution in marine insurance", https://www.histproj.org/completed/LEONARD_Marine insurance pricing revolution.pdf
+  (Borromei 1438, London falls of 50–75%, Marescoe, Jamaica rates 1740 and 1775; read in full text).
+- ECON-PSY: "How 12th-century Genoese merchants invented the idea of risk", https://psyche.co/ideas/how-12th-century-genoese-merchants-invented-the-idea-of-risk
+  (first *resicum* contract, Genoa, 26 April 1156; context only, not read beyond the search listing).
+
+Not opened and flagged: Ceccarelli's Datini-archive study (https://emis.univie.ac.at/journals/JEHPS/Juin2007/Ceccarelli_Risk.pdf,
+server error) and Iodice on Genoese general average and insurance (link dead); those are the first places to confirm
+the premium figures and the Genoese general-average valuation.
+
 ## Log
 
 | Date | What |
 |---|---|
 | 2026-10-30 | Written from the sources above; the STARTING_TOWN.md rows wait for the settlement keeper to finish its own before this file's values go in |
+| 2026-11-01 | Section 7 added: ECON-30, transit risk by contract form, general average, insurance, proposed mechanism |
