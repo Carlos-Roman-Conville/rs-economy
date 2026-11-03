@@ -43,6 +43,18 @@ not a game rule.
 | F4 | meals are capped by available stock | an oversized request eats takenKg, the whole stock mass; intake reflects available mass, never requested mass |
 | F5 | failed meals restore both engines | after a committed meal, a transaction containing a successful meal then an unknown-body failure restores stock, full economy state/log/events, and Life's comparison snapshot |
 
+## H — household holder (M1a-14, B0)
+
+`test/household-holder.test.ts`
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| H1 | opaque household holder opens inventory | `openInventory` with fixture `'household:h1'` sets `inventory.holder` to that exact string |
+| H2 | mass take from household stock | fixture weight 0.5 kg/unit; `addStock` 4 units; `takeMass` 0.5 kg leaves stock 3 and `takenKg` 0.5 |
+| H3 | holders do not share stock | person and household inventories on the same market; a change on one leaves the other's stock Δ = 0 |
+| H4 | no access decision | `takeMass` without authorisation input succeeds; no event carries an authorisation field |
+| H5 | replay (E3) | the same command log from a fresh `Runner` yields deep-equal state and events |
+
 ## Package tests (`test/markets.test.ts`), steps 3–4
 
 | Id | Rule under test | Must hold |
