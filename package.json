@@ -14,7 +14,7 @@
     "ports": "node --experimental-strip-types examples/three-ports.ts"
   },
   "dependencies": {
-    "@rex/kernel": "git+file:///E:/backups/reality-sim/git/kernel.git#v0.1.1"
+    "@rex/kernel": "git+file:///E:/backups/reality-sim/git/kernel.git#v0.2.0"
   },
   "devDependencies": {
     "@rex/realism": "file:../realism",
