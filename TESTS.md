@@ -255,3 +255,19 @@ unfixed hosts: none
 | Id | Rule under test | Must hold |
 |---|---|---|
 | TIH1 | autonomous host | deterministic seeded minds and rate priors; joint replay; daily conservation including shipments/loss; atomic fills; isolation; voyage capacity and loss; Society/report and seed fences; bootstrap offers; perceived-rate learning; authorised issue only |
+
+## X — declared boundary flows (ECON-32)
+
+`test/boundary-flows.test.ts`. Boundaries are interim external processes, holding no stock; E5/E6 replace them with real stores. Validation is bookkeeping identity only.
+
+| Id | Rule under test | Must hold |
+|---|---|---|
+| XBF1 | abstract production | one named source entry per good per day; original stock delta and events |
+| XBF2 | inventory spoilage | one named destination entry per inventory/good; unchanged daily fraction |
+| XBF3 | host additions and removals | one boundary entry each; excess removal refuses before effects |
+| XBF4 | zero flows | no entries; zero command events retained |
+| XBF5 | rate one | all stock leaves, exactly zero remains |
+| XBF6 | per-account reconciliation | opening plus receipts minus issues equals closing for every inventory/good over five days with buying |
+| XBF7 | legacy compatibility | thirty-day Runner state and events deep-equal the original adjust-based steps |
+| XBF8 | consumption excluded | market consumption draws stock without transfer entries |
+| XBF9 | boundary contract | only four declared processes and known goods; boundaries hold nothing |

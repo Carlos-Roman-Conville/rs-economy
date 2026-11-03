@@ -163,13 +163,25 @@ function setMarketGood(ctx: Ctx, cmd: Extract<Command, { type: 'setMarketGood' }
 
 function addStock(ctx: Ctx, invId: string, goodId: string, units: number): void {
   const inv = inventory(ctx, invId); good(ctx, goodId); finite(units, 'units', 0)
-  adjust(ctx, inv, goodId, units, 'add')
+  if (units === 0) { adjust(ctx, inv, goodId, units, 'add'); return }
+  const ledger = goodsLedger(ctx, 'add')
+  transfer(new TransferJournal('economy.goods'), {
+    t: simTime(ctx.state.day * 86_400_000), process: 'economy.add-stock', quantity: goodId,
+    unit: 'count', amount: units,
+    from: { ledger, account: 'boundary:economy.add-stock' }, to: { ledger, account: inv.id },
+  })
 }
 
 function removeStock(ctx: Ctx, invId: string, goodId: string, units: number): void {
   const inv = inventory(ctx, invId); good(ctx, goodId); finite(units, 'units', 0)
   if (units > stockOf(inv, goodId)) throw new Error(`cannot remove ${units} ${goodId} from ${invId}: have ${stockOf(inv, goodId)}`)
-  adjust(ctx, inv, goodId, -units, 'remove')
+  if (units === 0) { adjust(ctx, inv, goodId, -units, 'remove'); return }
+  const ledger = goodsLedger(ctx, 'remove')
+  transfer(new TransferJournal('economy.goods'), {
+    t: simTime(ctx.state.day * 86_400_000), process: 'economy.remove-stock', quantity: goodId,
+    unit: 'count', amount: units,
+    from: { ledger, account: inv.id }, to: { ledger, account: 'boundary:economy.remove-stock' },
+  })
 }
 
 function moveStock(ctx: Ctx, fromId: string, toId: string, goodId: string, units: number): void {

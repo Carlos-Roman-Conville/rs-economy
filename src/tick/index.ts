@@ -11,13 +11,18 @@ type Step = (ctx: Ctx, journal: TransferJournal) => void
 
 /** An abstract market adds its planned `productionPerDay` to its own stock (CONTRACTS.md §6); a settlement-run market
  *  produced through `produce` already. Then today's totals roll into `producedLast`. */
-export function production(ctx: Ctx): void {
+export function production(ctx: Ctx, journal = new TransferJournal('economy.goods')): void {
   for (const mkt of Object.values(ctx.state.markets)) {
     if (mkt.mode === 'abstract') {
       const inv = must(ctx.state.inventories, mkt.inventory, 'inventory')
       for (const [good, entry] of Object.entries(mkt.goods)) {
         if (entry.productionPerDay === null || entry.productionPerDay <= 0) continue
-        adjust(ctx, inv, good, entry.productionPerDay, 'abstract-production')
+        const ledger = goodsLedger(ctx, 'abstract-production')
+        transfer(journal, {
+          t: simTime(ctx.state.day * 86_400_000), process: 'economy.abstract-production', quantity: good,
+          unit: 'count', amount: entry.productionPerDay,
+          from: { ledger, account: 'boundary:economy.abstract-production' }, to: { ledger, account: inv.id },
+        })
         entry.producedToday += entry.productionPerDay
       }
     }
@@ -48,7 +53,7 @@ export function shipments(ctx: Ctx, journal = new TransferJournal('economy.goods
 
 /** Every inventory, and every shipment in transit, loses `spoilagePerDay` of each good that has one (E6). Goods with
  *  null spoil nothing (open). */
-export function spoilage(ctx: Ctx): void {
+export function spoilage(ctx: Ctx, journal = new TransferJournal('economy.goods')): void {
   for (const shipment of Object.values(ctx.state.shipments)) {
     if (shipment.status !== 'transit') continue
     const rate = ctx.state.goods[shipment.good]?.spoilagePerDay ?? null
@@ -62,7 +67,14 @@ export function spoilage(ctx: Ctx): void {
       const rate = ctx.state.goods[good]?.spoilagePerDay ?? null
       if (rate === null || rate <= 0 || units <= 0) continue
       const lost = units * rate
-      adjust(ctx, inv, good, -lost, 'spoilage')
+      if (lost > 0) {
+        const ledger = goodsLedger(ctx, 'spoilage')
+        transfer(journal, {
+          t: simTime(ctx.state.day * 86_400_000), process: 'economy.spoilage', quantity: good,
+          unit: 'count', amount: lost,
+          from: { ledger, account: inv.id }, to: { ledger, account: 'boundary:economy.spoilage' },
+        })
+      } else adjust(ctx, inv, good, -lost, 'spoilage')
       ctx.events.push({ type: 'spoiled', inventory: inv.id, good, units: lost })
     }
   }
